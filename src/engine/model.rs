@@ -145,6 +145,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
                 return true;
             }
             Err(_) => {
+                self.check_for_lines_and_clear();
                 self.next_piece();
                 return false;
             }
@@ -248,6 +249,40 @@ impl<T: Rng + Sized + Send> Tetris<T> {
                 break;
             }
         }
+    }
+
+    fn check_for_lines_and_clear(&mut self) {
+        while let Some(line_index) = self.check_line_clearing() {
+            self.clear_line_and_drop_all_above(line_index);
+        }
+    }
+
+    fn check_line_clearing(&self) -> Option<u32> {
+        'outer: for y in 0..TETRIS_FIELD_DEFAULT_HEIGHT {
+            for x in 0..TETRIS_FIELD_DEFAULT_WIDTH {
+                if self.field.get(x, y).unwrap() == CellStatus::Empty {
+                    continue 'outer;
+                }
+            }
+
+            return Some(y);
+        }
+
+        None
+    }
+
+    fn clear_line_and_drop_all_above(&mut self, line: u32) {
+        let field = &mut self.field.field;
+        for line in (line as usize)..(TETRIS_FIELD_DEFAULT_HEIGHT as usize - 1) {
+            let start_index = line * TETRIS_FIELD_DEFAULT_WIDTH as usize;
+            let mid_index = start_index + TETRIS_FIELD_DEFAULT_WIDTH as usize;
+            let end_index = mid_index + TETRIS_FIELD_DEFAULT_WIDTH as usize;
+
+            field.copy_within(mid_index..end_index, start_index);
+        }
+
+        let last_line_index = (TETRIS_FIELD_DEFAULT_WIDTH * (TETRIS_FIELD_DEFAULT_HEIGHT - 1)) as usize;
+        field[last_line_index..].copy_from_slice(&[CellStatus::Empty; TETRIS_FIELD_DEFAULT_WIDTH as usize]);
     }
 }
 

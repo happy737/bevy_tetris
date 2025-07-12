@@ -51,7 +51,7 @@ fn setup(mut commands: Commands,
     //camera
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 0.0, -25.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0.0, 0.0, 25.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     clear_color.0 = BLACK.into();
@@ -70,6 +70,15 @@ fn setup(mut commands: Commands,
         Mesh3d(meshes.add(LineListIndex::cube())),
         MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
         Transform::from_scale(Vec3::new(5.0, 10.0, 0.5)),
+    ));
+
+    commands.spawn((
+        Mesh3d(meshes.add(LineListIndex{
+            points: vec![Vec3::new(0.0, 50.0, 0.0), Vec3::new(0.0, -50.0, 0.0)],
+            indices: vec![0, 1],
+        })),
+        MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
+        Transform::IDENTITY,
     ));
 }
 
@@ -107,7 +116,7 @@ fn display_game_state(
             commands.spawn((
                 Mesh3d(cube_handle.0.clone()),
                 MeshMaterial3d(material_handle.clone()),
-                Transform::from_translation(Vec3::from(pos) - Vec3::new(4.0, 10.0, 0.0)),
+                Transform::from_translation(Vec3::from(pos) - Vec3::new(4.5, 10.0, 0.0)),
                 pos,
             ));
         }
@@ -119,15 +128,41 @@ fn display_game_state(
     }
 }
 
-fn update_game_state(mut game_query: Query<&mut Game>, time: Res<Time>, mut timer: ResMut<DropTimer>) {
+fn update_game_state(
+        game_query: Query<&mut Game>, 
+        time: Res<Time>, 
+        mut timer: ResMut<DropTimer>,
+        keyboard_input: Res<ButtonInput<KeyCode>>,
+    ) {
     if game_query.is_empty() {
         error!("Game is missing!");
         return;
     }
     let mut game = game_query.into_iter().next().unwrap();
 
+    //check if piece draps automatically
     if timer.0.tick(time.delta()).just_finished() {
         game.tetris.drop();
+    }
+
+    //check for moving left
+    if keyboard_input.just_pressed(KeyCode::KeyA) {
+        let _ = game.tetris.try_left();
+    }
+
+    //check for moving right
+    if keyboard_input.just_pressed(KeyCode::KeyD) {
+        let _ = game.tetris.try_right();
+    }
+
+    //drop one level
+    if keyboard_input.just_pressed(KeyCode::KeyS) {
+        game.tetris.drop();
+    }
+
+    //drop all the way down 
+    if keyboard_input.just_pressed(KeyCode::Space) {
+        game.tetris.drop_completely_down();
     }
 }
 

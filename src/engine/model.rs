@@ -157,7 +157,97 @@ impl<T: Rng + Sized + Send> Tetris<T> {
     }
 
     pub fn try_left(&mut self) -> Result<(), ()> {
-        todo!()
+        Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Left)
+    }
+
+    pub fn try_right(&mut self) -> Result<(), ()> {
+        Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Right)
+    }
+
+    fn check_move(field: &TetrisField, tetromino: &PhysicalTetromino, direction: Direction) -> Result<(), ()> {
+        let mut field_copy = field.clone();
+        let mut tetromino_copy = tetromino.clone();
+
+        //remove previous cells
+        for pos in tetromino_copy.coords {
+            if let Some(cell) = field_copy.get_mut(pos.x, pos.y) {
+                *cell = CellStatus::Empty;
+            }
+        }
+
+        //move active tetromino
+        match direction {
+            Direction::Down => {
+                tetromino_copy = (tetromino_copy - Pos2::new(0, 1))?;
+            }
+            Direction::Left => {
+                tetromino_copy = (tetromino_copy - Pos2::new(1, 0))?;
+            }
+            Direction::Right => {
+                tetromino_copy = tetromino_copy + Pos2::new(1, 0);
+                for pos in tetromino_copy.coords {
+                    if pos.x >= TETRIS_FIELD_DEFAULT_WIDTH {
+                        return Err(());
+                    }
+                }
+            }
+        }
+
+        //assert each new position is empty and legal
+        let all_pos_empty = true;
+        for pos in tetromino_copy.coords {
+            if let Some(cell) = field_copy.get(pos.x, pos.y) {
+                if cell != CellStatus::Empty {
+                    return Err(())
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn try_move(field: &mut TetrisField, tetromino: &mut PhysicalTetromino, direction: Direction) -> Result<(), ()> {
+        //check if move is doable
+        Tetris::<T>::check_move(field, tetromino, direction)?;
+
+        //clear previous positions
+        for pos in tetromino.coords {
+            if let Some(cell) = field.get_mut(pos.x, pos.y) {
+                *cell = CellStatus::Empty;
+            }
+        }
+
+        //move tetromino coordinates
+        match direction {
+            Direction::Down => {
+                *tetromino = (*tetromino - Pos2::new(0, 1))?;
+            }
+            Direction::Left => {
+                *tetromino = (*tetromino - Pos2::new(1, 0))?;
+            }
+            Direction::Right => {
+                *tetromino = *tetromino + Pos2::new(1, 0);
+                for pos in tetromino.coords {
+                    if pos.x >= TETRIS_FIELD_DEFAULT_WIDTH {
+                        return Err(());
+                    }
+                }
+            }
+        }
+
+        for pos in tetromino.coords {
+            *(field.get_mut(pos.x, pos.y).unwrap()) = tetromino.color;
+        }
+
+        Ok(())
+    }
+    
+    pub fn drop_completely_down(&mut self) {
+        loop {
+            if !self.drop() {
+                break;
+            }
+        }
     }
 }
 
@@ -413,4 +503,11 @@ impl std::ops::Sub<Pos2> for PhysicalTetromino {
         }
         Ok(self)
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Direction {
+    Left, 
+    Right, 
+    Down,
 }

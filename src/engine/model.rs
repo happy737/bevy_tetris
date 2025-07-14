@@ -49,7 +49,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
 
         for y in 0..TETRIS_FIELD_DEFAULT_HEIGHT {
             for x in 0..TETRIS_FIELD_DEFAULT_WIDTH {
-                let elem = self.field.get(x, y).unwrap();
+                let elem = self.field.get(x as i32, y as i32 ).unwrap();
                 if elem != CellStatus::Empty {
                     vec.push((elem, x, y));
                 }
@@ -64,25 +64,25 @@ impl<T: Rng + Sized + Send> Tetris<T> {
 
         let mut phys_tetromino = match tetromino {
             Tetromino::O => {
-                PhysicalTetromino::new(tetromino, CellStatus::Yellow) + Pos2::new(half_width, TETRIS_FIELD_DEFAULT_HEIGHT)
+                PhysicalTetromino::new(tetromino, CellStatus::Yellow) + Pos2::new(half_width as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
             }
             Tetromino::Line => {
-                PhysicalTetromino::new(tetromino, CellStatus::Cyan) + Pos2::new(half_width - 1, TETRIS_FIELD_DEFAULT_HEIGHT)
+                PhysicalTetromino::new(tetromino, CellStatus::Cyan) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
             }
             Tetromino::T => {
-                PhysicalTetromino::new(tetromino, CellStatus::Purple) + Pos2::new(half_width - 1, TETRIS_FIELD_DEFAULT_HEIGHT)
+                PhysicalTetromino::new(tetromino, CellStatus::Purple) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
             }
             Tetromino::L => {
-                PhysicalTetromino::new(tetromino, CellStatus::Orange) + Pos2::new(half_width - 1, TETRIS_FIELD_DEFAULT_HEIGHT)
+                PhysicalTetromino::new(tetromino, CellStatus::Orange) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
             }
             Tetromino::J => {
-                PhysicalTetromino::new(tetromino, CellStatus::Blue) + Pos2::new(half_width - 1, TETRIS_FIELD_DEFAULT_HEIGHT)
+                PhysicalTetromino::new(tetromino, CellStatus::Blue) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
             }
             Tetromino::S => {
-                PhysicalTetromino::new(tetromino, CellStatus::Green) + Pos2::new(half_width - 1, TETRIS_FIELD_DEFAULT_HEIGHT)
+                PhysicalTetromino::new(tetromino, CellStatus::Green) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
             }
             Tetromino::Z => {
-                PhysicalTetromino::new(tetromino, CellStatus::Red) + Pos2::new(half_width - 1, TETRIS_FIELD_DEFAULT_HEIGHT)
+                PhysicalTetromino::new(tetromino, CellStatus::Red) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
             }
         };
 
@@ -187,10 +187,13 @@ impl<T: Rng + Sized + Send> Tetris<T> {
             Direction::Right => {
                 tetromino_copy = tetromino_copy + Pos2::new(1, 0);
                 for pos in tetromino_copy.coords {
-                    if pos.x >= TETRIS_FIELD_DEFAULT_WIDTH {
+                    if pos.x >= TETRIS_FIELD_DEFAULT_WIDTH as i32 {
                         return Err(());
                     }
                 }
+            }
+            Direction::Up => {
+                tetromino_copy = tetromino_copy + Pos2::new(0, 1);
             }
         }
 
@@ -229,15 +232,20 @@ impl<T: Rng + Sized + Send> Tetris<T> {
             Direction::Right => {
                 *tetromino = *tetromino + Pos2::new(1, 0);
                 for pos in tetromino.coords {
-                    if pos.x >= TETRIS_FIELD_DEFAULT_WIDTH {
+                    if pos.x >= TETRIS_FIELD_DEFAULT_WIDTH as i32  {
                         return Err(());
                     }
                 }
             }
+            Direction::Up => {
+                *tetromino = (*tetromino + Pos2::new(0, 1));
+            }
         }
 
         for pos in tetromino.coords {
-            *(field.get_mut(pos.x, pos.y).unwrap()) = tetromino.color;
+            if let Some(cell) = field.get_mut(pos.x, pos.y) {
+                *cell = tetromino.color;
+            }
         }
 
         Ok(())
@@ -260,7 +268,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
     fn check_line_clearing(&self) -> Option<u32> {
         'outer: for y in 0..TETRIS_FIELD_DEFAULT_HEIGHT {
             for x in 0..TETRIS_FIELD_DEFAULT_WIDTH {
-                if self.field.get(x, y).unwrap() == CellStatus::Empty {
+                if self.field.get(x as i32, y as i32).unwrap() == CellStatus::Empty {
                     continue 'outer;
                 }
             }
@@ -284,6 +292,80 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         let last_line_index = (TETRIS_FIELD_DEFAULT_WIDTH * (TETRIS_FIELD_DEFAULT_HEIGHT - 1)) as usize;
         field[last_line_index..].copy_from_slice(&[CellStatus::Empty; TETRIS_FIELD_DEFAULT_WIDTH as usize]);
     }
+
+    pub fn spin_clock_90(&mut self) {
+        let _ = self.try_spin(SpinDirection::Clockwise);
+    }
+
+    pub fn spin_counter_90(&mut self) {
+        let _ = self.try_spin(SpinDirection::CounterClockwise);
+    }
+
+    fn try_spin(&mut self, spin_direction: SpinDirection) -> Result<(), ()> {
+        if self.check_spin(spin_direction).is_err() {
+            let tetromino_original = self.active_piece;
+            let field_original = self.field;
+            let tetromino_copy = tetromino_original.clone();
+            let field_copy = field_original.clone();
+            self.active_piece = tetromino_copy;
+            self.field = field_copy;
+
+            Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Up)?;
+
+            if self.check_spin(spin_direction).is_err() {
+                self.active_piece = tetromino_original;
+                self.field = field_original;
+                return Err(())
+            }
+        }
+
+        //remove previous blocks
+        for pos in self.active_piece.coords {
+            if let Some(cell) = self.field.get_mut(pos.x, pos.y) {
+                *cell = CellStatus::Empty;
+            }
+        }
+
+        //spin
+        self.active_piece.spin(spin_direction);
+
+        //add new blocks 
+        for pos in self.active_piece.coords {
+            if let Some(cell) = self.field.get_mut(pos.x, pos.y) {
+                *cell = self.active_piece.color;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn check_spin(&self, spin_direction: SpinDirection) -> Result<(), ()> {
+        let mut field_copy = self.field.clone();
+        let mut tetromino_copy = self.active_piece.clone();
+
+        //clear previous position
+        for pos in tetromino_copy.coords {
+            if let Some(cell) = field_copy.get_mut(pos.x, pos.y) {
+                *cell = CellStatus::Empty;
+            }
+        }
+
+        //spin the active piece
+        tetromino_copy.spin(spin_direction);
+
+        //check the new positions
+        for pos in tetromino_copy.coords {
+            if let Some(cell) = field_copy.get(pos.x, pos.y) {
+                if pos.x >= TETRIS_FIELD_DEFAULT_WIDTH as i32 || !(cell == CellStatus::Empty || cell == tetromino_copy.color) {
+                    return Err(());
+                }
+            } else {
+                return Err(());
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for Tetris<rand::rngs::OsRng> {
@@ -299,19 +381,19 @@ pub struct TetrisField {
 }
 
 impl TetrisField {
-    fn get(&self, x: u32, y: u32) -> Option<CellStatus> {
-        if x >= TETRIS_FIELD_DEFAULT_WIDTH || y >= TETRIS_FIELD_DEFAULT_HEIGHT {
+    fn get(&self, x: i32, y: i32) -> Option<CellStatus> {
+        if !(0..TETRIS_FIELD_DEFAULT_WIDTH as i32).contains(&x) || !(0..TETRIS_FIELD_DEFAULT_HEIGHT as i32).contains(&y) {
             None
         } else {
-            Some(self.field[(y * TETRIS_FIELD_DEFAULT_WIDTH + x) as usize])
+            Some(self.field[(y * TETRIS_FIELD_DEFAULT_WIDTH as i32 + x) as usize])
         }
     }
 
-    fn get_mut(&mut self, x: u32, y: u32) -> Option<&mut CellStatus> {
-        if x >= TETRIS_FIELD_DEFAULT_WIDTH || y >= TETRIS_FIELD_DEFAULT_HEIGHT {
+    fn get_mut(&mut self, x: i32, y: i32) -> Option<&mut CellStatus> {
+        if !(0..TETRIS_FIELD_DEFAULT_WIDTH as i32).contains(&x) || !(0..TETRIS_FIELD_DEFAULT_HEIGHT as i32).contains(&y) {
             None
         } else {
-            Some(&mut self.field[(y * TETRIS_FIELD_DEFAULT_WIDTH + x) as usize])
+            Some(&mut self.field[(y * TETRIS_FIELD_DEFAULT_WIDTH as i32 + x) as usize])
         }
     }
 }
@@ -400,12 +482,12 @@ impl<T: Rng + Sized> Iterator for &mut TetrominoIterator<T> {
 
 #[derive(Clone, Copy, Debug)]
 struct Pos2 {
-    pub x: u32, 
-    pub y: u32
+    pub x: i32, 
+    pub y: i32
 }
 
 impl Pos2 {
-    fn new(x: u32, y: u32) -> Self {
+    fn new(x: i32, y: i32) -> Self {
         Self {
             x, 
             y, 
@@ -439,9 +521,83 @@ impl std::ops::Sub<Pos2> for Pos2 {
     }
 }
 
+impl From<Pos2f> for Pos2 {
+    fn from(value: Pos2f) -> Self {
+        Pos2 {
+            x: value.x as i32,
+            y: value.y as i32,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Pos2f {
+    x: f32,
+    y: f32,
+}
+
+impl Pos2f {
+    const ZERO: Pos2f = Pos2f{x: 0.0, y: 0.0};
+
+    fn new(x: f32, y: f32) -> Self {
+        Self {
+            x, 
+            y,
+        }
+    }
+
+    fn rotate_clock_90(&mut self) {
+        let x = self.x;
+        let y = self.y;
+        
+        self.x = y;
+        self.y = -x;
+    }
+
+    fn rotate_counter_90(&mut self) {
+        let x = self.x;
+        let y = self.y;
+
+        self.x = -y;
+        self.y = x;
+    }
+}
+
+impl From<Pos2> for Pos2f {
+    fn from(value: Pos2) -> Self {
+        Self {
+            x: value.x as f32,
+            y: value.y as f32,
+        }
+    }
+}
+
+impl std::ops::Add<Pos2f> for Pos2f {
+    type Output = Pos2f;
+
+    fn add(self, rhs: Pos2f) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+impl std::ops::Sub<Pos2f> for Pos2f {
+    type Output = Pos2f;
+
+    fn sub(self, rhs: Pos2f) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct PhysicalTetromino {
     coords: [Pos2; 4],
+    rotation_center: Pos2f,
     tetromino: Tetromino,
     color: CellStatus,
 }
@@ -450,69 +606,120 @@ impl PhysicalTetromino {
     /// Generates a new Physical Tetromino from a given [Tetromino]. The initial position of a physical 
     /// Tetromino will be (0, 0) for the left-most, lowest cube - iff the shape is konvex at the bottom left. 
     fn new(tetromino: Tetromino, color: CellStatus) -> Self {
-        let coords = match tetromino {
+        let (coords, rotation_center) = match tetromino {
             Tetromino::Line => {
-                [
-                    Pos2::new(0, 0),
-                    Pos2::new(1, 0),
-                    Pos2::new(2, 0),
-                    Pos2::new(3, 0),
-                ]
+                (
+                    [
+                        Pos2::new(0, 0),
+                        Pos2::new(1, 0),
+                        Pos2::new(2, 0),
+                        Pos2::new(3, 0),
+                    ],
+                    Pos2f::new(1.5, 0.0),
+                )
             }
             Tetromino::O => {
-                [
-                    Pos2::new(0, 0),
-                    Pos2::new(0, 1),
-                    Pos2::new(1, 0),
-                    Pos2::new(1, 1),
-                ]
+                (   
+                    [
+                        Pos2::new(0, 0),
+                        Pos2::new(0, 1),
+                        Pos2::new(1, 0),
+                        Pos2::new(1, 1),
+                    ],
+                    Pos2f::new(0.5, 0.5),
+                )
             }
             Tetromino::J => {
-                [
-                    Pos2::new(0, 0),
-                    Pos2::new(0, 1),
-                    Pos2::new(1, 0),
-                    Pos2::new(2, 0),
-                ]
+                ( 
+                    [
+                        Pos2::new(0, 0),
+                        Pos2::new(0, 1),
+                        Pos2::new(1, 0),
+                        Pos2::new(2, 0),
+                    ],
+                    Pos2f::new(1.0, 0.5),
+                )
             }
             Tetromino::L => {
-                [
-                    Pos2::new(0, 0),
-                    Pos2::new(1, 0),
-                    Pos2::new(2, 0),
-                    Pos2::new(2, 1),
-                ]
+                (
+                    [
+                        Pos2::new(0, 0),
+                        Pos2::new(1, 0),
+                        Pos2::new(2, 0),
+                        Pos2::new(2, 1),
+                    ],
+                    Pos2f::new(1.0, 0.5),
+                )
             }
             Tetromino::S => {
-                [
-                    Pos2::new(0, 0),
-                    Pos2::new(1, 0),
-                    Pos2::new(1, 1),
-                    Pos2::new(2, 1),
-                ]
+                (   
+                    [
+                        Pos2::new(0, 0),
+                        Pos2::new(1, 0),
+                        Pos2::new(1, 1),
+                        Pos2::new(2, 1),
+                    ], 
+                    Pos2f::new(1.0, 0.5),
+                )
             }
             Tetromino::Z => {
-                [
-                    Pos2::new(0, 1),
-                    Pos2::new(1, 1),
-                    Pos2::new(1, 0),
-                    Pos2::new(2, 0),
-                ]
+                (
+                    [
+                        Pos2::new(0, 1),
+                        Pos2::new(1, 1),
+                        Pos2::new(1, 0),
+                        Pos2::new(2, 0),
+                    ],
+                    Pos2f::new(1.0, 0.5),
+                )
             }
             Tetromino::T => {
-                [
-                    Pos2::new(0, 0),
-                    Pos2::new(1, 0),
-                    Pos2::new(2, 0),
-                    Pos2::new(1, 1),
-                ]
+                (
+                    [
+                        Pos2::new(0, 0),
+                        Pos2::new(1, 0),
+                        Pos2::new(2, 0),
+                        Pos2::new(1, 1),
+                    ],
+                    Pos2f::new(1.0, 0.0),
+                )
             }
         };
 
         Self {
             coords, 
+            rotation_center,
             tetromino,
             color,
+        }
+    }
+
+    fn spin(&mut self, spin_direction: SpinDirection) {
+        let mut float_positions = [Pos2f::ZERO; 4];
+        for (index, pos) in self.coords.iter().enumerate() {
+            float_positions[index] = Pos2f::from(*pos) - self.rotation_center;
+        }
+
+        for pos in &mut self.coords {
+            let mut float_pos = Pos2f::from(*pos);
+
+            //untranslate
+            float_pos = float_pos - self.rotation_center;
+
+            //rotate
+            match spin_direction {
+                SpinDirection::Clockwise => {
+                    float_pos.rotate_clock_90();
+                }
+                SpinDirection::CounterClockwise => {
+                    float_pos.rotate_counter_90();
+                }
+            }
+
+            //retranslate
+            float_pos = float_pos + self.rotation_center;
+
+            *pos = Pos2::from(float_pos);
         }
     }
 }
@@ -525,6 +732,8 @@ impl std::ops::Add<Pos2> for PhysicalTetromino {
             *pos = *pos + rhs;
         }
 
+        self.rotation_center = self.rotation_center + rhs.into();
+
         self
     }
 }
@@ -536,6 +745,9 @@ impl std::ops::Sub<Pos2> for PhysicalTetromino {
         for pos in &mut self.coords {
             *pos = (*pos - rhs)?;
         }
+
+        self.rotation_center = self.rotation_center - rhs.into();
+
         Ok(self)
     }
 }
@@ -545,4 +757,11 @@ enum Direction {
     Left, 
     Right, 
     Down,
+    Up,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum SpinDirection {
+    Clockwise, 
+    CounterClockwise,
 }

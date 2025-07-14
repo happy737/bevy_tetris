@@ -164,6 +164,14 @@ fn update_game_state(
     if keyboard_input.just_pressed(KeyCode::Space) {
         game.tetris.drop_completely_down();
     }
+
+    if keyboard_input.just_pressed(KeyCode::KeyQ) {
+        game.tetris.spin_counter_90();
+    }
+
+    if keyboard_input.just_pressed(KeyCode::KeyE) {
+        game.tetris.spin_clock_90();
+    }
 }
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]

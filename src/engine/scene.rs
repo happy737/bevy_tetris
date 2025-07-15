@@ -48,12 +48,16 @@ fn setup(mut commands: Commands,
     //timer that repeatedly drops active tetromino
     commands.insert_resource(DropTimer(Timer::from_seconds(2.0, TimerMode::Repeating)));
 
+    //flag that is set to recolor existing cubes
+    commands.insert_resource(RecolorCubes(false));
+
     //camera
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 0.0, 25.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
+    //make background black
     clear_color.0 = BLACK.into();
 
     //light source
@@ -72,14 +76,15 @@ fn setup(mut commands: Commands,
         Transform::from_scale(Vec3::new(5.0, 10.0, 0.5)),
     ));
 
-    commands.spawn((
-        Mesh3d(meshes.add(LineListIndex{
-            points: vec![Vec3::new(0.0, 50.0, 0.0), Vec3::new(0.0, -50.0, 0.0)],
-            indices: vec![0, 1],
-        })),
-        MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
-        Transform::IDENTITY,
-    ));
+    //center dividing line
+    // commands.spawn((
+    //     Mesh3d(meshes.add(LineListIndex{
+    //         points: vec![Vec3::new(0.0, 50.0, 0.0), Vec3::new(0.0, -50.0, 0.0)],
+    //         indices: vec![0, 1],
+    //     })),
+    //     MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
+    //     Transform::IDENTITY,
+    // ));
 }
 
 #[derive(Clone, Component, Debug, Default)]
@@ -90,9 +95,10 @@ pub struct Game {
 fn display_game_state(
         mut commands: Commands, 
         game_query: Query<&Game>, 
-        cubes_query: Query<(Entity, &CellPosition)>,
+        mut cubes_query: Query<(Entity, &CellPosition, &mut MeshMaterial3d<StandardMaterial>)>,
         cube_handle: Res<CubeHandle>,
         material_handles: Res<MaterialsHandle>,
+        mut update_cube_color: ResMut<RecolorCubes>,
     ) {
     if game_query.is_empty() {
         error!("Game is missing!");
@@ -102,14 +108,20 @@ fn display_game_state(
     
     //get all the cubes the system is currently displaying
     let mut existing_cubes = cubes_query
-        .iter()
-        .fold(HashMap::new(), |mut map, (entity, pos)| {map.insert(pos, entity); map});
+        .iter_mut()
+        .fold(HashMap::new(), |mut map, (entity, pos, material)| {map.insert(pos, (entity, material)); map});
 
     //get all the positions where cubes should be. If one is missing, spawn it
     for (cell, x, y) in game.tetris.get_block_list() {
         let pos = CellPosition::new(x as i32, y as i32);
 
-        if existing_cubes.remove(&pos).is_none() {
+        if let Some((_, material)) = &mut existing_cubes.remove(&pos) {
+            //if necessary flag is set, re assign every material. 
+            // this prevents a bug where immediately dropping a piece will mis-color some cubes of the following piece
+            if update_cube_color.0 {
+                material.0 = material_handles.0[&cell].clone();
+            }
+        } else {
             //spawn new cube
             let material_handle = &material_handles.0[&cell];
 
@@ -123,9 +135,11 @@ fn display_game_state(
     }
 
     //all remaining cubes are at positions where nothing should be, remove them
-    for (_, entity) in existing_cubes.into_iter() {
+    for (_, (entity, _)) in existing_cubes.into_iter() {
         commands.entity(entity).despawn();
     }
+
+    update_cube_color.0 = false;
 }
 
 fn update_game_state(
@@ -133,6 +147,7 @@ fn update_game_state(
         time: Res<Time>, 
         mut timer: ResMut<DropTimer>,
         keyboard_input: Res<ButtonInput<KeyCode>>,
+        mut update_cube_color: ResMut<RecolorCubes>,
     ) {
     if game_query.is_empty() {
         error!("Game is missing!");
@@ -143,6 +158,7 @@ fn update_game_state(
     //check if piece draps automatically
     if timer.0.tick(time.delta()).just_finished() {
         game.tetris.drop();
+        update_cube_color.0 = true;
     }
 
     //check for moving left
@@ -158,11 +174,13 @@ fn update_game_state(
     //drop one level
     if keyboard_input.just_pressed(KeyCode::KeyS) {
         game.tetris.drop();
+        update_cube_color.0 = true;
     }
 
     //drop all the way down 
     if keyboard_input.just_pressed(KeyCode::Space) {
         game.tetris.drop_completely_down();
+        update_cube_color.0 = true;
     }
 
     if keyboard_input.just_pressed(KeyCode::KeyQ) {
@@ -207,3 +225,6 @@ struct MaterialsHandle(HashMap<engine::model::CellStatus, Handle<StandardMateria
 
 #[derive(Resource)]
 struct DropTimer(Timer);
+
+#[derive(Resource)]
+struct RecolorCubes(bool);

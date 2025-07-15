@@ -142,12 +142,12 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         match drop_result {
             Ok(_) => {
                 //successfull drop, nothing else to be done
-                return true;
+                true
             }
             Err(_) => {
                 self.check_for_lines_and_clear();
                 self.next_piece();
-                return false;
+                false
             }
         }
     }
@@ -198,7 +198,6 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         }
 
         //assert each new position is empty and legal
-        let all_pos_empty = true;
         for pos in tetromino_copy.coords {
             if let Some(cell) = field_copy.get(pos.x, pos.y) {
                 if cell != CellStatus::Empty {
@@ -238,7 +237,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
                 }
             }
             Direction::Up => {
-                *tetromino = (*tetromino + Pos2::new(0, 1));
+                *tetromino = *tetromino + Pos2::new(0, 1);
             }
         }
 
@@ -370,7 +369,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
 
 impl Default for Tetris<rand::rngs::OsRng> {
     fn default() -> Self {
-        let rng = rand::rngs::OsRng::default();
+        let rng = rand::rngs::OsRng;
         Tetris::new(rng)
     }
 }

@@ -12,7 +12,7 @@ pub struct Tetris<T: Rng + Sized + Send> {
     pub field: TetrisField,
     active_piece: PhysicalTetromino,
     next_piece: PhysicalTetromino,
-    stored_piece: Tetromino,
+    stored_piece: PhysicalTetromino,
     iterator: TetrominoIterator<T>,
     switchted_active_piece_since_last_drop: bool,
 }
@@ -23,26 +23,35 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         let mut field = [CellStatus::Empty; TETRIS_FIELD_LENGTH].into();
         let active_piece = Tetris::<T>::place_tetromino_on_field(&mut field, (&mut iterator).next().unwrap());
         let next_piece = Tetris::<T>::tetromino_to_physical((&mut iterator).next().unwrap());
+        let stored_piece = Tetris::<T>::tetromino_to_physical((&mut iterator).next().unwrap());
 
         Self {
             field,
             active_piece,
             next_piece,
-            stored_piece: (&mut iterator).next().unwrap(),
+            stored_piece,
             iterator,
             switchted_active_piece_since_last_drop: false,
         }
     }
 
     pub fn try_switch_active_piece(&mut self) -> Result<(), ()> {
-        // if self.switchted_active_piece_since_last_drop {
-        //     return Err(());
-        // }
+        if self.switchted_active_piece_since_last_drop {
+            return Err(());
+        }
 
-        // std::mem::swap(&mut self.active_piece, &mut self.stored_piece);
-        // Ok(())
+        //clear board of active piece
+        for pos in self.active_piece.coords {
+            if let Some(cell) = self.field.get_mut(pos.x, pos.y) {
+                *cell = CellStatus::Empty;
+            }
+        }
 
-        todo!()
+        let old_active = self.active_piece.tetromino;
+        self.active_piece = Tetris::<T>::place_tetromino_on_field(&mut self.field, self.stored_piece.tetromino);
+        self.stored_piece = Tetris::<T>::tetromino_to_physical(old_active);
+        self.switchted_active_piece_since_last_drop = true;
+        Ok(())
     }
 
     pub fn get_block_list(&self) -> Vec<(CellStatus, u32, u32)> {
@@ -65,6 +74,16 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         
         for (index, pos) in self.next_piece.coords.iter().enumerate() {
             arr[index] = (self.next_piece.color, pos.x as u32, pos.y as u32);
+        }
+
+        arr
+    }
+
+    pub fn get_stored_block_list(&self) -> [(CellStatus, u32, u32); 4] {
+        let mut arr: [(CellStatus, u32, u32); 4] = [(CellStatus::Empty, 0, 0); 4];
+        
+        for (index, pos) in self.stored_piece.coords.iter().enumerate() {
+            arr[index] = (self.stored_piece.color, pos.x as u32, pos.y as u32);
         }
 
         arr
@@ -192,6 +211,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
                 true
             }
             Err(_) => {
+                self.switchted_active_piece_since_last_drop = false;
                 self.check_for_lines_and_clear();
                 self.next_piece();
                 false

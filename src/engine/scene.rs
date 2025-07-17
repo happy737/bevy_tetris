@@ -17,6 +17,7 @@ impl Plugin for ScenePlugin {
         app.add_systems(Update, display_game_state);
         app.add_systems(Update, update_game_state);
         app.add_systems(Update, display_next_piece);
+        app.add_systems(Update, display_stored_piece);
     }
 }
 
@@ -82,6 +83,13 @@ fn setup(mut commands: Commands,
         Mesh3d(meshes.add(LineListIndex::cube())),
         MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
         Transform::from_scale(Vec3::new(2.0, 1.0, 0.5)).with_translation(Vec3::new(12.0, 16.0, 0.0) - Vec3::new(4.0, 10.5, 0.0)),
+    ));
+
+    //stored piece line cube
+    commands.spawn((
+        Mesh3d(meshes.add(LineListIndex::cube())),
+        MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
+        Transform::from_scale(Vec3::new(2.0, 1.0, 0.5)).with_translation(Vec3::new(12.0, 12.0, 0.0) - Vec3::new(4.0, 10.5, 0.0)),
     ));
 
     //center dividing line
@@ -199,6 +207,52 @@ fn display_next_piece(
     }
 }
 
+fn display_stored_piece(
+    mut commands: Commands, 
+    game_query: Query<&Game>, 
+    mut stored_cubes_query: Query<(Entity, &CellPosition, &mut MeshMaterial3d<StandardMaterial>), With<StoredPixelMarker>>,
+    cube_handle: Res<CubeHandle>,
+    material_handles: Res<MaterialsHandle>,
+) {
+    if game_query.is_empty() {
+        error!("Game is missing!");
+        return;
+    }
+    let game = game_query.into_iter().next().unwrap();
+    
+    //next piece cubes
+
+    //get all the cubes the system is currently displaying
+    let mut existing_stored_cubes = stored_cubes_query
+        .iter_mut()
+        .fold(HashMap::new(), |mut map, (entity, pos, material)| {map.insert(pos, (entity, material)); map});
+
+    //get all the positions where cubes should be. If one is missing, spawn it
+    for (cell, x, y) in game.tetris.get_stored_block_list() {
+        let pos = CellPosition::new(x as i32, y as i32);
+
+        if let Some((_, material)) = &mut existing_stored_cubes.remove(&pos) {
+            //if necessary flag is set, re assign every material. 
+            material.0 = material_handles.0[&cell].clone();
+        } else {
+            //spawn new cube
+            let material_handle = &material_handles.0[&cell];
+
+            commands.spawn((
+                Mesh3d(cube_handle.0.clone()),
+                MeshMaterial3d(material_handle.clone()),
+                Transform::from_translation(Vec3::from(pos) - Vec3::new(4.5, 10.0, 0.0) + Vec3::new(11.0, 11.0, 0.0)),
+                pos,
+                StoredPixelMarker,
+            ));
+        }
+    }
+    //all remaining cubes are at positions where nothing should be, remove them
+    for (_, (entity, _)) in existing_stored_cubes.into_iter() {
+        commands.entity(entity).despawn();
+    }
+}
+
 fn update_game_state(
         game_query: Query<&mut Game>, 
         time: Res<Time>, 
@@ -240,12 +294,20 @@ fn update_game_state(
         update_cube_color.0 = true;
     }
 
+    //spin active piece counterclockwise
     if keyboard_input.just_pressed(KeyCode::KeyQ) {
         game.tetris.spin_counter_90();
     }
 
+    //spin active piece clockwise
     if keyboard_input.just_pressed(KeyCode::KeyE) {
         game.tetris.spin_clock_90();
+    }
+
+    //switch active peace with stored piece
+    if keyboard_input.just_pressed(KeyCode::KeyW) {
+        let _ = game.tetris.try_switch_active_piece();
+        update_cube_color.0 = true;
     }
 }
 
@@ -291,3 +353,6 @@ struct MainPixelMarker;
 
 #[derive(Component)]
 struct NextPixelMarker;
+
+#[derive(Component)]
+struct StoredPixelMarker;

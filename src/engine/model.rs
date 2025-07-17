@@ -1,3 +1,4 @@
+use bevy::log::info;
 use rand::Rng;
 use rand::seq::SliceRandom;
 
@@ -422,7 +423,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         //check the new positions
         for pos in tetromino_copy.coords {
             if let Some(cell) = field_copy.get(pos.x, pos.y) {
-                if pos.x >= TETRIS_FIELD_DEFAULT_WIDTH as i32 || !(cell == CellStatus::Empty || cell == tetromino_copy.color) {
+                if !(0..(TETRIS_FIELD_DEFAULT_WIDTH as i32)).contains(&pos.x) || !(cell == CellStatus::Empty || cell == tetromino_copy.color) {
                     return Err(());
                 }
             } else {
@@ -549,7 +550,7 @@ impl<T: Rng + Sized> Iterator for &mut TetrominoIterator<T> {
 #[derive(Clone, Copy, Debug)]
 struct Pos2 {
     pub x: i32, 
-    pub y: i32
+    pub y: i32,
 }
 
 impl Pos2 {
@@ -590,7 +591,7 @@ impl std::ops::Sub<Pos2> for Pos2 {
 impl From<Pos2f> for Pos2 {
     fn from(value: Pos2f) -> Self {
         Pos2 {
-            x: value.x as i32,
+            x: value.x.floor() as i32,
             y: value.y as i32,
         }
     }
@@ -761,11 +762,6 @@ impl PhysicalTetromino {
     }
 
     fn spin(&mut self, spin_direction: SpinDirection) {
-        let mut float_positions = [Pos2f::ZERO; 4];
-        for (index, pos) in self.coords.iter().enumerate() {
-            float_positions[index] = Pos2f::from(*pos) - self.rotation_center;
-        }
-
         for pos in &mut self.coords {
             let mut float_pos = Pos2f::from(*pos);
 

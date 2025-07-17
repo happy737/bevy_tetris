@@ -68,7 +68,7 @@ fn setup(mut commands: Commands,
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(0.0, 0.0, -6.0),
+        Transform::from_xyz(0.0, 0.0, 6.0),
     ));
 
     //line cube
@@ -146,7 +146,7 @@ fn display_game_state(
             commands.spawn((
                 Mesh3d(cube_handle.0.clone()),
                 MeshMaterial3d(material_handle.clone()),
-                Transform::from_translation(Vec3::from(pos) - Vec3::new(4.5, 10.0, 0.0)),
+                Transform::from_translation(Vec3::from(pos) - Vec3::new(4.5, 9.5, 0.0)),
                 pos,
                 MainPixelMarker,
             ));

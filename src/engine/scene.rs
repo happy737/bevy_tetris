@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::color::palettes::css::BLACK;
+use bevy::math::VectorSpace;
 use bevy::prelude::*;
 
 use crate::engine;
@@ -18,6 +19,7 @@ impl Plugin for ScenePlugin {
         app.add_systems(Update, update_game_state);
         app.add_systems(Update, display_next_piece);
         app.add_systems(Update, display_stored_piece);
+        app.add_systems(Update, display_ghost_piece);
     }
 }
 
@@ -39,8 +41,14 @@ fn setup(mut commands: Commands,
 
     commands.insert_resource(MaterialsHandle(material_map));
 
+    //line material
+    commands.insert_resource(LineMaterialHandle(materials_line.add(LineMaterial {color: LinearRgba::WHITE})));
+
     //load mesh of a cube
     commands.insert_resource(CubeHandle(meshes.add(Cuboid::new(1.0, 1.0, 1.0))));
+
+    //load mesh of line cube
+    commands.insert_resource(LineCubeHandle(meshes.add(LineListIndex::cube())));
 
     //tetris model
     commands.spawn((
@@ -253,6 +261,56 @@ fn display_stored_piece(
     }
 }
 
+fn display_ghost_piece(
+    mut commands: Commands, 
+    game_query: Query<&Game>, 
+    mut ghost_cubes_query: Query<(Entity, &CellPosition, &mut MeshMaterial3d<LineMaterial>), With<GhostPixelMarker>>,
+    mut line_cube_handle: ResMut<LineCubeHandle>,
+    line_material_handle: Res<LineMaterialHandle>,
+
+    mut meshes: ResMut<Assets<Mesh>>, 
+) {
+    let game = game_query.into_iter().next().unwrap();
+    
+    //next piece cubes
+
+    //get all the cubes the system is currently displaying
+    let mut existing_ghost_cubes = ghost_cubes_query
+        .iter_mut()
+        .fold(HashMap::new(), |mut map, (entity, pos, material)| {map.insert(pos, (entity, material)); map});
+
+    //get all the positions where cubes should be. If one is missing, spawn it
+    for (x, y) in game.tetris.get_ghost_piece_list() {
+        let pos = CellPosition::new(x as i32, y as i32);
+
+        if let Some((_, material)) = &mut existing_ghost_cubes.remove(&pos) {
+            material.0 = line_material_handle.0.clone();
+        } else {
+            //spawn new cube
+            let material_handle = &line_material_handle.0;
+
+            if meshes.get(&line_cube_handle.0.clone()).is_none() {
+                error!("Line Cube Mesh has been unloaded. Reloading it");
+                line_cube_handle.0 = meshes.add(LineListIndex::cube());
+            }
+
+            commands.spawn((
+                Mesh3d(line_cube_handle.0.clone()),
+                //Mesh3d(meshes.add(LineListIndex::cube())),
+                MeshMaterial3d(material_handle.clone()),
+                Transform::from_scale(Vec3::new(0.5, 0.5, 0.5))
+                    .with_translation(Vec3::from(pos) - Vec3::new(4.5, 9.5, 0.0)),
+                pos,
+                GhostPixelMarker,
+            ));
+        }
+    }
+    //all remaining cubes are at positions where nothing should be, remove them
+    for (_, (entity, _)) in existing_ghost_cubes.into_iter() {
+        commands.entity(entity).despawn();
+    }
+}
+
 fn update_game_state(
         game_query: Query<&mut Game>, 
         time: Res<Time>, 
@@ -340,7 +398,13 @@ impl From<CellPosition> for Vec3 {
 struct CubeHandle(Handle<Mesh>);
 
 #[derive(Resource)]
+struct LineCubeHandle(Handle<Mesh>);
+
+#[derive(Resource)]
 struct MaterialsHandle(HashMap<engine::model::CellStatus, Handle<StandardMaterial>>);
+
+#[derive(Resource)]
+struct LineMaterialHandle(Handle<LineMaterial>);
 
 #[derive(Resource)]
 struct DropTimer(Timer);
@@ -356,3 +420,6 @@ struct NextPixelMarker;
 
 #[derive(Component)]
 struct StoredPixelMarker;
+
+#[derive(Component)]
+struct GhostPixelMarker;

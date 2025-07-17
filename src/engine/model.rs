@@ -14,6 +14,7 @@ pub struct Tetris<T: Rng + Sized + Send> {
     active_piece: PhysicalTetromino,
     next_piece: PhysicalTetromino,
     stored_piece: PhysicalTetromino,
+    ghost_piece: PhysicalTetromino,
     iterator: TetrominoIterator<T>,
     switchted_active_piece_since_last_drop: bool,
 }
@@ -25,12 +26,14 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         let active_piece = Tetris::<T>::place_tetromino_on_field(&mut field, (&mut iterator).next().unwrap());
         let next_piece = Tetris::<T>::tetromino_to_physical((&mut iterator).next().unwrap());
         let stored_piece = Tetris::<T>::tetromino_to_physical((&mut iterator).next().unwrap());
+        let ghost_piece = Tetris::<T>::find_ghost_piece_pos(&field, &active_piece);
 
         Self {
             field,
             active_piece,
             next_piece,
             stored_piece,
+            ghost_piece,
             iterator,
             switchted_active_piece_since_last_drop: false,
         }
@@ -85,6 +88,16 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         
         for (index, pos) in self.stored_piece.coords.iter().enumerate() {
             arr[index] = (self.stored_piece.color, pos.x as u32, pos.y as u32);
+        }
+
+        arr
+    }
+
+    pub fn get_ghost_piece_list(&self) -> [(u32, u32); 4] {
+        let mut arr = [(0, 0); 4];
+        
+        for (index, pos) in self.ghost_piece.coords.iter().enumerate() {
+            arr[index] = (pos.x as u32, pos.y as u32);
         }
 
         arr
@@ -215,9 +228,14 @@ impl<T: Rng + Sized + Send> Tetris<T> {
                 self.switchted_active_piece_since_last_drop = false;
                 self.check_for_lines_and_clear();
                 self.next_piece();
+                self.refresh_ghost_piece();
                 false
             }
         }
+    }
+
+    fn refresh_ghost_piece(&mut self) {
+        self.ghost_piece = Tetris::<T>::find_ghost_piece_pos(&self.field, &self.active_piece);
     }
 
     fn next_piece(&mut self) {
@@ -226,11 +244,15 @@ impl<T: Rng + Sized + Send> Tetris<T> {
     }
 
     pub fn try_left(&mut self) -> Result<(), ()> {
-        Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Left)
+        Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Left)?;
+        self.refresh_ghost_piece();
+        Ok(())
     }
 
     pub fn try_right(&mut self) -> Result<(), ()> {
-        Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Right)
+        Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Right)?;
+        self.refresh_ghost_piece();
+        Ok(())
     }
 
     fn check_move(field: &TetrisField, tetromino: &PhysicalTetromino, direction: Direction) -> Result<(), ()> {
@@ -403,6 +425,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
             }
         }
 
+        self.refresh_ghost_piece();
+
         Ok(())
     }
 
@@ -432,6 +456,36 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         }
 
         Ok(())
+    }
+
+    fn find_ghost_piece_pos(field: &TetrisField, tetromino: &PhysicalTetromino) -> PhysicalTetromino {
+        let mut field = *field;
+        
+        for pos in tetromino.coords {
+            if let Some(cell) = field.get_mut(pos.x, pos.y) {
+                *cell = CellStatus::Empty;
+            }
+        }
+
+        let mut y = 0;
+        'outer: loop {
+            let lower_tetromino = *tetromino + Pos2::new(0, y - 1);
+
+            for pos in lower_tetromino.coords {
+                if let Some(cell) = field.get(pos.x, pos.y) {
+                    if cell != CellStatus::Empty {
+                        break 'outer;
+                    }
+                } else {
+                    break 'outer;
+                }
+            }
+            y -= 1;
+        }
+
+        let mut return_val = PhysicalTetromino::new(tetromino.tetromino, CellStatus::Empty);
+        return_val.coords = (*tetromino + Pos2::new(0, y)).coords;
+        return_val
     }
 }
 

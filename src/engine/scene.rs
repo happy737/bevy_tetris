@@ -16,6 +16,7 @@ impl Plugin for ScenePlugin {
         app.add_systems(Startup, setup);
         app.add_systems(Update, display_game_state);
         app.add_systems(Update, update_game_state);
+        app.add_systems(Update, display_next_piece);
     }
 }
 
@@ -76,6 +77,13 @@ fn setup(mut commands: Commands,
         Transform::from_scale(Vec3::new(5.0, 10.0, 0.5)),
     ));
 
+    //next piece line cube
+    commands.spawn((
+        Mesh3d(meshes.add(LineListIndex::cube())),
+        MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
+        Transform::from_scale(Vec3::new(2.0, 1.0, 0.5)).with_translation(Vec3::new(12.0, 16.0, 0.0) - Vec3::new(4.0, 10.5, 0.0)),
+    ));
+
     //center dividing line
     // commands.spawn((
     //     Mesh3d(meshes.add(LineListIndex{
@@ -95,7 +103,7 @@ pub struct Game {
 fn display_game_state(
         mut commands: Commands, 
         game_query: Query<&Game>, 
-        mut cubes_query: Query<(Entity, &CellPosition, &mut MeshMaterial3d<StandardMaterial>)>,
+        mut cubes_query: Query<(Entity, &CellPosition, &mut MeshMaterial3d<StandardMaterial>), With<MainPixelMarker>>,
         cube_handle: Res<CubeHandle>,
         material_handles: Res<MaterialsHandle>,
         mut update_cube_color: ResMut<RecolorCubes>,
@@ -106,6 +114,8 @@ fn display_game_state(
     }
     let game = game_query.into_iter().next().unwrap();
     
+    //main cubes
+
     //get all the cubes the system is currently displaying
     let mut existing_cubes = cubes_query
         .iter_mut()
@@ -130,6 +140,7 @@ fn display_game_state(
                 MeshMaterial3d(material_handle.clone()),
                 Transform::from_translation(Vec3::from(pos) - Vec3::new(4.5, 10.0, 0.0)),
                 pos,
+                MainPixelMarker,
             ));
         }
     }
@@ -140,6 +151,52 @@ fn display_game_state(
     }
 
     update_cube_color.0 = false;
+}
+
+fn display_next_piece(
+    mut commands: Commands, 
+    game_query: Query<&Game>, 
+    mut next_cubes_query: Query<(Entity, &CellPosition, &mut MeshMaterial3d<StandardMaterial>), With<NextPixelMarker>>,
+    cube_handle: Res<CubeHandle>,
+    material_handles: Res<MaterialsHandle>,
+) {
+    if game_query.is_empty() {
+        error!("Game is missing!");
+        return;
+    }
+    let game = game_query.into_iter().next().unwrap();
+    
+    //next piece cubes
+
+    //get all the cubes the system is currently displaying
+    let mut existing_next_cubes = next_cubes_query
+        .iter_mut()
+        .fold(HashMap::new(), |mut map, (entity, pos, material)| {map.insert(pos, (entity, material)); map});
+
+    //get all the positions where cubes should be. If one is missing, spawn it
+    for (cell, x, y) in game.tetris.get_next_block_list() {
+        let pos = CellPosition::new(x as i32, y as i32);
+
+        if let Some((_, material)) = &mut existing_next_cubes.remove(&pos) {
+            //if necessary flag is set, re assign every material. 
+            material.0 = material_handles.0[&cell].clone();
+        } else {
+            //spawn new cube
+            let material_handle = &material_handles.0[&cell];
+
+            commands.spawn((
+                Mesh3d(cube_handle.0.clone()),
+                MeshMaterial3d(material_handle.clone()),
+                Transform::from_translation(Vec3::from(pos) - Vec3::new(4.5, 10.0, 0.0) + Vec3::new(11.0, 15.0, 0.0)),
+                pos,
+                NextPixelMarker,
+            ));
+        }
+    }
+    //all remaining cubes are at positions where nothing should be, remove them
+    for (_, (entity, _)) in existing_next_cubes.into_iter() {
+        commands.entity(entity).despawn();
+    }
 }
 
 fn update_game_state(
@@ -228,3 +285,9 @@ struct DropTimer(Timer);
 
 #[derive(Resource)]
 struct RecolorCubes(bool);
+
+#[derive(Component)]
+struct MainPixelMarker;
+
+#[derive(Component)]
+struct NextPixelMarker;

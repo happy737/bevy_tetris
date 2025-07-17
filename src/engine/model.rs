@@ -11,7 +11,7 @@ const TETRIS_FIELD_LENGTH: usize = (TETRIS_FIELD_DEFAULT_WIDTH * TETRIS_FIELD_DE
 pub struct Tetris<T: Rng + Sized + Send> {
     pub field: TetrisField,
     active_piece: PhysicalTetromino,
-    next_piece: Tetromino,
+    next_piece: PhysicalTetromino,
     stored_piece: Tetromino,
     iterator: TetrominoIterator<T>,
     switchted_active_piece_since_last_drop: bool,
@@ -22,11 +22,12 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         let mut iterator = TetrominoIterator::new(rng);
         let mut field = [CellStatus::Empty; TETRIS_FIELD_LENGTH].into();
         let active_piece = Tetris::<T>::place_tetromino_on_field(&mut field, (&mut iterator).next().unwrap());
+        let next_piece = Tetris::<T>::tetromino_to_physical((&mut iterator).next().unwrap());
 
         Self {
             field,
             active_piece,
-            next_piece: (&mut iterator).next().unwrap(),
+            next_piece,
             stored_piece: (&mut iterator).next().unwrap(),
             iterator,
             switchted_active_piece_since_last_drop: false,
@@ -59,32 +60,52 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         vec
     }
 
+    pub fn get_next_block_list(&self) -> [(CellStatus, u32, u32); 4] {
+        let mut arr: [(CellStatus, u32, u32); 4] = [(CellStatus::Empty, 0, 0); 4];
+        
+        for (index, pos) in self.next_piece.coords.iter().enumerate() {
+            arr[index] = (self.next_piece.color, pos.x as u32, pos.y as u32);
+        }
+
+        arr
+    }
+
     fn place_tetromino_on_field(field: &mut TetrisField, tetromino: Tetromino) -> PhysicalTetromino {
         let half_width = TETRIS_FIELD_DEFAULT_WIDTH / 2 - 1;
 
-        let mut phys_tetromino = match tetromino {
+        let mut phys_tetromino = Tetris::<T>::tetromino_to_physical(tetromino);
+        match phys_tetromino.tetromino {
             Tetromino::O => {
-                PhysicalTetromino::new(tetromino, CellStatus::Yellow) + Pos2::new(half_width as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
+                phys_tetromino = phys_tetromino + Pos2::new(half_width as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32);
             }
-            Tetromino::Line => {
-                PhysicalTetromino::new(tetromino, CellStatus::Cyan) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
+            Tetromino::Line | Tetromino::T | Tetromino::L | Tetromino::J | Tetromino::S | Tetromino::Z => {
+                phys_tetromino = phys_tetromino + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32);
             }
-            Tetromino::T => {
-                PhysicalTetromino::new(tetromino, CellStatus::Purple) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-            }
-            Tetromino::L => {
-                PhysicalTetromino::new(tetromino, CellStatus::Orange) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-            }
-            Tetromino::J => {
-                PhysicalTetromino::new(tetromino, CellStatus::Blue) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-            }
-            Tetromino::S => {
-                PhysicalTetromino::new(tetromino, CellStatus::Green) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-            }
-            Tetromino::Z => {
-                PhysicalTetromino::new(tetromino, CellStatus::Red) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-            }
-        };
+        }
+
+        // let mut phys_tetromino = match tetromino {
+        //     Tetromino::O => {
+        //         PhysicalTetromino::new(tetromino, CellStatus::Yellow) + Pos2::new(half_width as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
+        //     }
+        //     Tetromino::Line => {
+        //         PhysicalTetromino::new(tetromino, CellStatus::Cyan) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
+        //     }
+        //     Tetromino::T => {
+        //         PhysicalTetromino::new(tetromino, CellStatus::Purple) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
+        //     }
+        //     Tetromino::L => {
+        //         PhysicalTetromino::new(tetromino, CellStatus::Orange) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
+        //     }
+        //     Tetromino::J => {
+        //         PhysicalTetromino::new(tetromino, CellStatus::Blue) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
+        //     }
+        //     Tetromino::S => {
+        //         PhysicalTetromino::new(tetromino, CellStatus::Green) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
+        //     }
+        //     Tetromino::Z => {
+        //         PhysicalTetromino::new(tetromino, CellStatus::Red) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
+        //     }
+        // };
 
         if Tetris::<T>::try_drop(field, &mut phys_tetromino).is_ok()
                 && tetromino != Tetromino::Line {
@@ -92,6 +113,32 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         }
 
         phys_tetromino
+    }
+
+    fn tetromino_to_physical(tetromino: Tetromino) -> PhysicalTetromino {
+        match tetromino {
+            Tetromino::O => {
+                PhysicalTetromino::new(tetromino, CellStatus::Yellow)
+            }
+            Tetromino::Line => {
+                PhysicalTetromino::new(tetromino, CellStatus::Cyan)
+            }
+            Tetromino::T => {
+                PhysicalTetromino::new(tetromino, CellStatus::Purple)
+            }
+            Tetromino::L => {
+                PhysicalTetromino::new(tetromino, CellStatus::Orange)
+            }
+            Tetromino::J => {
+                PhysicalTetromino::new(tetromino, CellStatus::Blue)
+            }
+            Tetromino::S => {
+                PhysicalTetromino::new(tetromino, CellStatus::Green)
+            }
+            Tetromino::Z => {
+                PhysicalTetromino::new(tetromino, CellStatus::Red)
+            }
+        }
     }
 
     fn try_drop(field: &mut TetrisField, tetromino: &mut PhysicalTetromino) -> Result<(), ()> {
@@ -153,8 +200,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
     }
 
     fn next_piece(&mut self) {
-        self.active_piece = Tetris::<T>::place_tetromino_on_field(&mut self.field, self.next_piece);
-        self.next_piece = (&mut self.iterator).next().unwrap();
+        self.active_piece = Tetris::<T>::place_tetromino_on_field(&mut self.field, self.next_piece.tetromino);
+        self.next_piece = Tetris::<T>::tetromino_to_physical((&mut self.iterator).next().unwrap());
     }
 
     pub fn try_left(&mut self) -> Result<(), ()> {

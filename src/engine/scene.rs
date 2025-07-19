@@ -17,7 +17,7 @@ const SLOW_DROP_SCORE: u32 = 1;
 const FAST_DROP_SCORE: u32 = 2;
 
 const BASE_DROP_DURATION_SECS: f64 = 1.0;
-const DIFFICULTY: u32 = 1;  //TODO revert to 1
+const DIFFICULTY: u32 = 10;  //TODO revert to 1
 
 pub struct ScenePlugin;
 
@@ -30,6 +30,7 @@ impl Plugin for ScenePlugin {
         app.add_systems(Update, display_next_piece);
         app.add_systems(Update, display_stored_piece);
         app.add_systems(Update, display_ghost_piece);
+        app.add_systems(Update, update_audio);
     }
 }
 
@@ -38,6 +39,7 @@ fn setup(mut commands: Commands,
          mut materials: ResMut<Assets<StandardMaterial>>, 
          mut materials_line: ResMut<Assets<LineMaterial>>,
          mut clear_color: ResMut<ClearColor>,
+         asset_server: Res<AssetServer>
         ) {
     //colorful materials for each block color
     let mut material_map = HashMap::new();
@@ -113,6 +115,15 @@ fn setup(mut commands: Commands,
         Mesh3d(line_cube_handle.clone()),
         MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
         Transform::from_scale(Vec3::new(2.0, 1.0, 0.5)).with_translation(Vec3::new(12.0, 12.0, 0.0) - Vec3::new(4.0, 10.5, 0.0)),
+    ));
+
+    //start music
+    commands.spawn((
+        AudioPlayer::new(asset_server.load("music/Tetris.ogg")),
+        PlaybackSettings {
+            mode: bevy::audio::PlaybackMode::Loop,
+            ..Default::default()
+        },
     ));
 
     //center dividing line
@@ -428,6 +439,23 @@ fn update_game_state(
         let _ = game.tetris.try_switch_active_piece();
         update_cube_color.0 = true;
     }
+}
+
+fn update_audio(
+    audio_query: Query<&AudioSink>,
+    score: Res<GameScore>,
+) {
+    let Ok(sink) = audio_query.single() else {return};
+
+    let mut speed = 1.0;
+    if score.level >= 10 {
+        speed = 1.2;
+    }
+    if score.level >= 15 {
+        speed = (1.4 + 0.2 * (score.level - 15) as f32).max(2.4);
+    } 
+
+    sink.set_speed(speed);
 }
 
 fn level_to_drop_duration(level: u32) -> f64 {

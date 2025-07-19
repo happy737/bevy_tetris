@@ -1,13 +1,23 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use bevy::color::palettes::css::BLACK;
-use bevy::math::VectorSpace;
 use bevy::prelude::*;
 
 use crate::engine;
 use crate::engine::line_stuff::LineListIndex;
 use crate::engine::line_stuff::LineMaterial;
 use crate::engine::model::CellStatus;
+
+const ONE_LINE_SCORE: u32 = 100;
+const TWO_LINE_SCORE: u32 = 300;
+const THREE_LINE_SCORE: u32 = 500;
+const FOUR_LINE_SCORE: u32 = 800;
+const SLOW_DROP_SCORE: u32 = 1;
+const FAST_DROP_SCORE: u32 = 2;
+
+const BASE_DROP_DURATION_SECS: f64 = 1.0;
+const DIFFICULTY: u32 = 1;  //TODO revert to 1
 
 pub struct ScenePlugin;
 
@@ -47,13 +57,18 @@ fn setup(mut commands: Commands,
     //load mesh of a cube
     commands.insert_resource(CubeHandle(meshes.add(Cuboid::new(1.0, 1.0, 1.0))));
 
+    let line_cube_handle = meshes.add(LineListIndex::cube());
+
     //load mesh of line cube
-    commands.insert_resource(LineCubeHandle(meshes.add(LineListIndex::cube())));
+    commands.insert_resource(LineCubeHandle(line_cube_handle.clone()));
 
     //tetris model
     commands.spawn((
         Game::default(),
     ));
+
+    //score of the game
+    commands.insert_resource(GameScore::default());
 
     //timer that repeatedly drops active tetromino
     commands.insert_resource(DropTimer(Timer::from_seconds(2.0, TimerMode::Repeating)));
@@ -81,21 +96,21 @@ fn setup(mut commands: Commands,
 
     //line cube
     commands.spawn((
-        Mesh3d(meshes.add(LineListIndex::cube())),
+        Mesh3d(line_cube_handle.clone()),
         MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
         Transform::from_scale(Vec3::new(5.0, 10.0, 0.5)),
     ));
 
     //next piece line cube
     commands.spawn((
-        Mesh3d(meshes.add(LineListIndex::cube())),
+        Mesh3d(line_cube_handle.clone()),
         MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
         Transform::from_scale(Vec3::new(2.0, 1.0, 0.5)).with_translation(Vec3::new(12.0, 16.0, 0.0) - Vec3::new(4.0, 10.5, 0.0)),
     ));
 
     //stored piece line cube
     commands.spawn((
-        Mesh3d(meshes.add(LineListIndex::cube())),
+        Mesh3d(line_cube_handle.clone()),
         MeshMaterial3d(materials_line.add(LineMaterial{color: LinearRgba::WHITE})),
         Transform::from_scale(Vec3::new(2.0, 1.0, 0.5)).with_translation(Vec3::new(12.0, 12.0, 0.0) - Vec3::new(4.0, 10.5, 0.0)),
     ));
@@ -289,8 +304,8 @@ fn display_ghost_piece(
             //spawn new cube
             let material_handle = &line_material_handle.0;
 
-            if meshes.get(&line_cube_handle.0.clone()).is_none() {
-                error!("Line Cube Mesh has been unloaded. Reloading it");
+            if meshes.get(&line_cube_handle.0.clone()).is_none() {  //TODO THIS BUG IS SHIT
+                warn!("Line Cube Mesh has been unloaded. Reloading it");
                 line_cube_handle.0 = meshes.add(LineListIndex::cube());
             }
 
@@ -317,6 +332,7 @@ fn update_game_state(
         mut timer: ResMut<DropTimer>,
         keyboard_input: Res<ButtonInput<KeyCode>>,
         mut update_cube_color: ResMut<RecolorCubes>,
+        mut game_score: ResMut<GameScore>,
     ) {
     if game_query.is_empty() {
         error!("Game is missing!");
@@ -324,10 +340,25 @@ fn update_game_state(
     }
     let mut game = game_query.into_iter().next().unwrap();
 
-    //check if piece draps automatically
+    //check if piece drops automatically
     if timer.0.tick(time.delta()).just_finished() {
-        game.tetris.drop();
+        if let (false, Some(nbr_of_lines)) = game.tetris.drop() {
+            let add_score = match nbr_of_lines {
+                0 => {0}
+                1 => {ONE_LINE_SCORE}
+                2 => {TWO_LINE_SCORE}
+                3 => {THREE_LINE_SCORE}
+                4 => {FOUR_LINE_SCORE}
+                _ => {
+                    error!("Unexpected number of lines cleared after drop to bottom. Expected range: [0; 4], Actual: {nbr_of_lines}");
+                    panic!();
+                }
+            };
+            game_score.change(add_score, nbr_of_lines);
+        }
         update_cube_color.0 = true;
+
+        timer.0.set_duration(Duration::from_secs_f64(level_to_drop_duration(game_score.level)));
     }
 
     //check for moving left
@@ -342,13 +373,43 @@ fn update_game_state(
 
     //drop one level
     if keyboard_input.just_pressed(KeyCode::KeyS) {
-        game.tetris.drop();
+        if let (false, Some(nbr_of_lines)) = game.tetris.drop() {
+            let add_score = match nbr_of_lines {
+                0 => {0}
+                1 => {ONE_LINE_SCORE}
+                2 => {TWO_LINE_SCORE}
+                3 => {THREE_LINE_SCORE}
+                4 => {FOUR_LINE_SCORE}
+                _ => {
+                    error!("Unexpected number of lines cleared after drop to bottom. Expected range: [0; 4], Actual: {nbr_of_lines}");
+                    panic!();
+                }
+            };
+            game_score.change(add_score, nbr_of_lines);
+        }
+        game_score.change(SLOW_DROP_SCORE, 0);
+
+        timer.0.reset();
         update_cube_color.0 = true;
     }
 
     //drop all the way down 
     if keyboard_input.just_pressed(KeyCode::Space) {
-        game.tetris.drop_completely_down();
+        let (nbr_of_dropped_cells, nbr_of_cleared_lines) = game.tetris.drop_completely_down();
+        let mut add_score = match nbr_of_cleared_lines {
+            0 => {0}
+            1 => {ONE_LINE_SCORE}
+            2 => {TWO_LINE_SCORE}
+            3 => {THREE_LINE_SCORE}
+            4 => {FOUR_LINE_SCORE}
+            _ => {
+                error!("Unexpected number of lines cleared after drop to bottom. Expected range: [0; 4], Actual: {nbr_of_cleared_lines}");
+                panic!();
+            }
+        };
+        add_score += nbr_of_dropped_cells * FAST_DROP_SCORE;
+        game_score.change(add_score, nbr_of_cleared_lines);
+
         update_cube_color.0 = true;
     }
 
@@ -367,6 +428,12 @@ fn update_game_state(
         let _ = game.tetris.try_switch_active_piece();
         update_cube_color.0 = true;
     }
+}
+
+fn level_to_drop_duration(level: u32) -> f64 {
+    let level = level as f64;
+
+    (BASE_DROP_DURATION_SECS - level * 0.05).max(0.05)
 }
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -423,3 +490,18 @@ struct StoredPixelMarker;
 
 #[derive(Component)]
 struct GhostPixelMarker;
+
+#[derive(Debug, Default, Resource)]
+pub struct GameScore {
+    score: u32,
+    level: u32,
+    cleared_lines: u32,
+}
+
+impl GameScore {
+    fn change(&mut self, add_score: u32, add_lines: u32) {
+        self.score += add_score;
+        self.cleared_lines += add_lines;
+        self.level = (self.cleared_lines * DIFFICULTY) / 10;
+    }
+}

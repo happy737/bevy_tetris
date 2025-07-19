@@ -55,6 +55,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         self.active_piece = Tetris::<T>::place_tetromino_on_field(&mut self.field, self.stored_piece.tetromino);
         self.stored_piece = Tetris::<T>::tetromino_to_physical(old_active);
         self.switchted_active_piece_since_last_drop = true;
+        self.refresh_ghost_piece();
         Ok(())
     }
 
@@ -217,19 +218,19 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         }
     }
 
-    pub fn drop(&mut self) -> bool {
+    pub fn drop(&mut self) -> (bool, Option<u32>) {
         let drop_result = Tetris::<T>::try_drop(&mut self.field, &mut self.active_piece);
         match drop_result {
             Ok(_) => {
                 //successfull drop, nothing else to be done
-                true
+                (true, None)
             }
             Err(_) => {
                 self.switchted_active_piece_since_last_drop = false;
-                self.check_for_lines_and_clear();
+                let nbr_of_lines = self.check_for_lines_and_clear();
                 self.next_piece();
                 self.refresh_ghost_piece();
-                false
+                (false, Some(nbr_of_lines))
             }
         }
     }
@@ -340,18 +341,25 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         Ok(())
     }
     
-    pub fn drop_completely_down(&mut self) {
+    pub fn drop_completely_down(&mut self) -> (u32, u32) {
+        let mut dropped_cell_counter = 0;
         loop {
-            if !self.drop() {
-                break;
+            if let (false, Some(nbr_of_cleared_lines)) = self.drop() {
+                return (dropped_cell_counter, nbr_of_cleared_lines)
             }
+            dropped_cell_counter += 1;
         }
     }
 
-    fn check_for_lines_and_clear(&mut self) {
+    fn check_for_lines_and_clear(&mut self) -> u32 {
+        let mut counter = 0;
+
         while let Some(line_index) = self.check_line_clearing() {
             self.clear_line_and_drop_all_above(line_index);
+            counter += 1;
         }
+
+        counter
     }
 
     fn check_line_clearing(&self) -> Option<u32> {

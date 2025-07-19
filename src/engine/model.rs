@@ -218,19 +218,29 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         }
     }
 
-    pub fn drop(&mut self) -> (bool, Option<u32>) {
+    pub fn drop(&mut self) -> Result<(bool, Option<u32>), ()> {
         let drop_result = Tetris::<T>::try_drop(&mut self.field, &mut self.active_piece);
         match drop_result {
             Ok(_) => {
                 //successfull drop, nothing else to be done
-                (true, None)
+                Ok((true, None))
             }
             Err(_) => {
+                //piece is already at the bottom
+
+                //check if pixel of any piece is outside of the playingfield
+                for pos in self.active_piece.coords {
+                    if pos.y >= TETRIS_FIELD_DEFAULT_HEIGHT as i32 {
+                        return Err(());
+                    }
+                }
+
+                //do the usual cleanup and spawn new piece at the top
                 self.switchted_active_piece_since_last_drop = false;
                 let nbr_of_lines = self.check_for_lines_and_clear();
                 self.next_piece();
                 self.refresh_ghost_piece();
-                (false, Some(nbr_of_lines))
+                Ok((false, Some(nbr_of_lines)))
             }
         }
     }
@@ -341,11 +351,12 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         Ok(())
     }
     
-    pub fn drop_completely_down(&mut self) -> (u32, u32) {
+    pub fn drop_completely_down(&mut self) -> Result<(u32, u32), ()> {
         let mut dropped_cell_counter = 0;
         loop {
-            if let (false, Some(nbr_of_cleared_lines)) = self.drop() {
-                return (dropped_cell_counter, nbr_of_cleared_lines)
+            let result = self.drop()?;
+            if let (false, Some(nbr_of_cleared_lines)) = result {
+                return Ok((dropped_cell_counter, nbr_of_cleared_lines))
             }
             dropped_cell_counter += 1;
         }

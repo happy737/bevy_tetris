@@ -17,7 +17,7 @@ const SLOW_DROP_SCORE: u32 = 1;
 const FAST_DROP_SCORE: u32 = 2;
 
 const BASE_DROP_DURATION_SECS: f64 = 1.0;
-const DIFFICULTY: u32 = 10;  //TODO revert to 1
+const DIFFICULTY: u32 = 1;  //TODO should always be 1
 
 pub struct ScenePlugin;
 
@@ -126,6 +126,9 @@ fn setup(mut commands: Commands,
         },
     ));
 
+    //add a struct which will prematurely end all functions working with a game overed game
+    commands.insert_resource(IsAppRunning(true));
+
     //center dividing line
     // commands.spawn((
     //     Mesh3d(meshes.add(LineListIndex{
@@ -149,7 +152,11 @@ fn display_game_state(
         cube_handle: Res<CubeHandle>,
         material_handles: Res<MaterialsHandle>,
         mut update_cube_color: ResMut<RecolorCubes>,
+        running: Res<IsAppRunning>,
     ) {
+    if !running.0 {
+        return;
+    }
     if game_query.is_empty() {
         error!("Game is missing!");
         return;
@@ -201,7 +208,12 @@ fn display_next_piece(
     mut next_cubes_query: Query<(Entity, &CellPosition, &mut MeshMaterial3d<StandardMaterial>), With<NextPixelMarker>>,
     cube_handle: Res<CubeHandle>,
     material_handles: Res<MaterialsHandle>,
+    running: Res<IsAppRunning>,
 ) {
+    if !running.0 {
+        return;
+    }
+
     if game_query.is_empty() {
         error!("Game is missing!");
         return;
@@ -247,7 +259,12 @@ fn display_stored_piece(
     mut stored_cubes_query: Query<(Entity, &CellPosition, &mut MeshMaterial3d<StandardMaterial>), With<StoredPixelMarker>>,
     cube_handle: Res<CubeHandle>,
     material_handles: Res<MaterialsHandle>,
+    running: Res<IsAppRunning>,
 ) {
+    if !running.0 {
+        return;
+    }
+
     if game_query.is_empty() {
         error!("Game is missing!");
         return;
@@ -293,9 +310,14 @@ fn display_ghost_piece(
     mut ghost_cubes_query: Query<(Entity, &CellPosition, &mut MeshMaterial3d<LineMaterial>), With<GhostPixelMarker>>,
     mut line_cube_handle: ResMut<LineCubeHandle>,
     line_material_handle: Res<LineMaterialHandle>,
+    running: Res<IsAppRunning>,
 
     mut meshes: ResMut<Assets<Mesh>>, 
 ) {
+    if !running.0 {
+        return;
+    }
+
     let game = game_query.into_iter().next().unwrap();
     
     //next piece cubes
@@ -344,7 +366,12 @@ fn update_game_state(
         keyboard_input: Res<ButtonInput<KeyCode>>,
         mut update_cube_color: ResMut<RecolorCubes>,
         mut game_score: ResMut<GameScore>,
+        mut running: ResMut<IsAppRunning>,
     ) {
+    if !running.0 {
+        return;
+    }
+
     if game_query.is_empty() {
         error!("Game is missing!");
         return;
@@ -353,7 +380,8 @@ fn update_game_state(
 
     //check if piece drops automatically
     if timer.0.tick(time.delta()).just_finished() {
-        if let (false, Some(nbr_of_lines)) = game.tetris.drop() {
+        let result = game.tetris.drop();
+        if let Ok((false, Some(nbr_of_lines))) = result {
             let add_score = match nbr_of_lines {
                 0 => {0}
                 1 => {ONE_LINE_SCORE}
@@ -366,6 +394,8 @@ fn update_game_state(
                 }
             };
             game_score.change(add_score, nbr_of_lines);
+        } else if result.is_err() {
+            running.0 = false;
         }
         update_cube_color.0 = true;
 
@@ -384,7 +414,8 @@ fn update_game_state(
 
     //drop one level
     if keyboard_input.just_pressed(KeyCode::KeyS) {
-        if let (false, Some(nbr_of_lines)) = game.tetris.drop() {
+        let result = game.tetris.drop();
+        if let Ok((false, Some(nbr_of_lines))) = result {
             let add_score = match nbr_of_lines {
                 0 => {0}
                 1 => {ONE_LINE_SCORE}
@@ -397,6 +428,8 @@ fn update_game_state(
                 }
             };
             game_score.change(add_score, nbr_of_lines);
+        } else if result.is_err() {
+            running.0 = false;
         }
         game_score.change(SLOW_DROP_SCORE, 0);
 
@@ -406,20 +439,25 @@ fn update_game_state(
 
     //drop all the way down 
     if keyboard_input.just_pressed(KeyCode::Space) {
-        let (nbr_of_dropped_cells, nbr_of_cleared_lines) = game.tetris.drop_completely_down();
-        let mut add_score = match nbr_of_cleared_lines {
-            0 => {0}
-            1 => {ONE_LINE_SCORE}
-            2 => {TWO_LINE_SCORE}
-            3 => {THREE_LINE_SCORE}
-            4 => {FOUR_LINE_SCORE}
-            _ => {
-                error!("Unexpected number of lines cleared after drop to bottom. Expected range: [0; 4], Actual: {nbr_of_cleared_lines}");
-                panic!();
-            }
-        };
-        add_score += nbr_of_dropped_cells * FAST_DROP_SCORE;
-        game_score.change(add_score, nbr_of_cleared_lines);
+        let result = game.tetris.drop_completely_down();
+        if result.is_err() {
+            running.0 = false;
+        } else {
+            let (nbr_of_dropped_cells, nbr_of_cleared_lines) = result.unwrap();
+            let mut add_score = match nbr_of_cleared_lines {
+                0 => {0}
+                1 => {ONE_LINE_SCORE}
+                2 => {TWO_LINE_SCORE}
+                3 => {THREE_LINE_SCORE}
+                4 => {FOUR_LINE_SCORE}
+                _ => {
+                    error!("Unexpected number of lines cleared after drop to bottom. Expected range: [0; 4], Actual: {nbr_of_cleared_lines}");
+                    panic!();
+                }
+            };
+            add_score += nbr_of_dropped_cells * FAST_DROP_SCORE;
+            game_score.change(add_score, nbr_of_cleared_lines);
+        }
 
         update_cube_color.0 = true;
     }
@@ -444,7 +482,12 @@ fn update_game_state(
 fn update_audio(
     audio_query: Query<&AudioSink>,
     score: Res<GameScore>,
+    running: Res<IsAppRunning>,
 ) {
+    if !running.0 {
+        return;
+    }
+
     let Ok(sink) = audio_query.single() else {return};
 
     let mut speed = 1.0;
@@ -457,6 +500,8 @@ fn update_audio(
 
     sink.set_speed(speed);
 }
+
+/////////////////// HERE THE HELPER FUNCTIONS AND STRUCTS START /////////////////////////
 
 fn level_to_drop_duration(level: u32) -> f64 {
     let level = level as f64;
@@ -533,3 +578,6 @@ impl GameScore {
         self.level = (self.cleared_lines * DIFFICULTY) / 10;
     }
 }
+
+#[derive(Resource)]
+struct IsAppRunning(bool);

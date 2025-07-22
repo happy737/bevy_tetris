@@ -14,6 +14,6 @@ fn main() {
                 ..Default::default()
             }
         ))
-        .add_plugins(engine::scene::ScenePlugin)
+        .add_plugins(ui::MyUiPlugin)
         .run();
 }

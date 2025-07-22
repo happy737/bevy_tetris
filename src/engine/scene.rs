@@ -367,6 +367,9 @@ fn update_game_state(
         mut update_cube_color: ResMut<RecolorCubes>,
         mut game_score: ResMut<GameScore>,
         mut running: ResMut<IsAppRunning>,
+
+        mut commands: Commands, 
+        show_game_over: Res<crate::ui::SpawnGameOverSystem>,
     ) {
     if !running.0 {
         return;
@@ -396,6 +399,7 @@ fn update_game_state(
             game_score.change(add_score, nbr_of_lines);
         } else if result.is_err() {
             running.0 = false;
+            commands.run_system(show_game_over.0);
         }
         update_cube_color.0 = true;
 
@@ -430,6 +434,7 @@ fn update_game_state(
             game_score.change(add_score, nbr_of_lines);
         } else if result.is_err() {
             running.0 = false;
+            commands.run_system(show_game_over.0);
         }
         game_score.change(SLOW_DROP_SCORE, 0);
 
@@ -442,6 +447,7 @@ fn update_game_state(
         let result = game.tetris.drop_completely_down();
         if result.is_err() {
             running.0 = false;
+            commands.run_system(show_game_over.0);
         } else {
             let (nbr_of_dropped_cells, nbr_of_cleared_lines) = result.unwrap();
             let mut add_score = match nbr_of_cleared_lines {
@@ -566,8 +572,8 @@ struct GhostPixelMarker;
 
 #[derive(Debug, Default, Resource)]
 pub struct GameScore {
-    score: u32,
-    level: u32,
+    pub score: u32,
+    pub level: u32,
     cleared_lines: u32,
 }
 
@@ -580,4 +586,4 @@ impl GameScore {
 }
 
 #[derive(Resource)]
-struct IsAppRunning(bool);
+pub(crate) struct IsAppRunning(pub(crate) bool);

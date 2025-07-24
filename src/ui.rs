@@ -29,6 +29,9 @@ fn setup(
 
     let game_over = commands.register_system(spawn_game_over_screen);
     commands.insert_resource(SpawnGameOverSystem(game_over));
+
+    let pause = commands.register_system(spawn_pause_screen);
+    commands.insert_resource(SpawnPauseSystem(pause));
 }
 
 fn spawn_game_over_screen(
@@ -37,8 +40,17 @@ fn spawn_game_over_screen(
     commands.spawn(generate_game_over_screen());
 }
 
+fn spawn_pause_screen(
+    mut commands: Commands,
+) {
+    commands.spawn(generate_pause_screen());
+}
+
 #[derive(Resource)]
 pub(crate) struct SpawnGameOverSystem(pub SystemId);
+
+#[derive(Resource)]
+pub struct SpawnPauseSystem(pub SystemId);
 
 fn generate_screen_window() -> impl Bundle + use<> {
     (
@@ -233,6 +245,37 @@ struct NewGameButton;
 #[derive(Component)]
 struct NewGameTopDiv;
 
+fn generate_pause_screen() -> impl Bundle + use<> {
+    (
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..Default::default()
+        },
+        BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
+        PausedTopDiv,
+        children![
+            (   //Paused Text Screen
+                Node::DEFAULT,
+                Text::new("Game Paused"),
+                TextFont {
+                    font_size: 50.0,
+                    ..Default::default()
+                },
+            ),
+            (   //Settings
+
+            )   //TODO
+        ],
+    )
+}
+
+#[derive(Component)]
+pub struct PausedTopDiv;
+
 fn new_game_button_listener(
     mut button_query: Query<(&Interaction, &mut bevy::ui::BackgroundColor), (Changed<Interaction>, With<Button>, With<NewGameButton>)>, 
     mut game_query: Query<&mut engine::scene::Game>,
@@ -259,7 +302,7 @@ fn new_game_button_listener(
             commands.entity(main_div).despawn();
 
             //set game to be running again
-            is_game_running.0 = true;
+            is_game_running.0 = engine::scene::AppState::Running;
         }
         Interaction::Hovered => {
             *background_color = BackgroundColor(Color::Srgba(Srgba { red: 1.0, green: 1.0, blue: 1.0, alpha: 0.2 }));

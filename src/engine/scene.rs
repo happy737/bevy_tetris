@@ -31,6 +31,7 @@ impl Plugin for ScenePlugin {
         app.add_systems(Update, display_stored_piece);
         app.add_systems(Update, display_ghost_piece);
         app.add_systems(Update, update_audio);
+        app.add_systems(Update, manage_pause);
     }
 }
 
@@ -127,7 +128,7 @@ fn setup(mut commands: Commands,
     ));
 
     //add a struct which will prematurely end all functions working with a game overed game
-    commands.insert_resource(IsAppRunning(true));
+    commands.insert_resource(IsAppRunning(AppState::Running));
 
     //center dividing line
     // commands.spawn((
@@ -154,7 +155,7 @@ fn display_game_state(
         mut update_cube_color: ResMut<RecolorCubes>,
         running: Res<IsAppRunning>,
     ) {
-    if !running.0 {
+    if !(running.0 == AppState::Running) {
         return;
     }
     if game_query.is_empty() {
@@ -210,7 +211,7 @@ fn display_next_piece(
     material_handles: Res<MaterialsHandle>,
     running: Res<IsAppRunning>,
 ) {
-    if !running.0 {
+    if !(running.0 == AppState::Running) {
         return;
     }
 
@@ -261,7 +262,7 @@ fn display_stored_piece(
     material_handles: Res<MaterialsHandle>,
     running: Res<IsAppRunning>,
 ) {
-    if !running.0 {
+    if !(running.0 == AppState::Running) {
         return;
     }
 
@@ -314,7 +315,7 @@ fn display_ghost_piece(
 
     mut meshes: ResMut<Assets<Mesh>>, 
 ) {
-    if !running.0 {
+    if !(running.0 == AppState::Running) {
         return;
     }
 
@@ -359,6 +360,49 @@ fn display_ghost_piece(
     }
 }
 
+fn manage_pause(
+    mut app_state: ResMut<IsAppRunning>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    show_paused_menu: Res<crate::ui::SpawnPauseSystem>,
+    mut commands: Commands,
+    previous_state_query: Query<(&GamePausedPreviousState, Entity)>,
+    paused_top_div_query: Query<Entity, With<crate::ui::PausedTopDiv>>,
+) {
+    let state = app_state.0;
+    //Game is currently not paused
+    if state == AppState::Running {
+        if keyboard_input.just_pressed(KeyCode::Escape) {
+            app_state.0 = AppState::Paused;
+            commands.run_system(show_paused_menu.0);
+            commands.spawn(GamePausedPreviousState(state));
+        }
+        return;
+    }
+    if state == AppState::GameOver {
+        return;
+    }
+
+    //game is currently paused
+
+    //end pause
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        let Ok((previous_state, entity)) = previous_state_query.single() else {return;};
+        app_state.0 = previous_state.0;
+        commands.entity(entity).despawn();
+
+        let Ok(top_div_entity) = paused_top_div_query.single() else {
+            error!("Couldn't find and remove the top div of the paused screen!");
+            return;
+        };
+        commands.entity(top_div_entity).despawn();
+    }
+
+    //todo!()
+}
+
+#[derive(Component)]
+struct GamePausedPreviousState(AppState);
+
 fn update_game_state(
         game_query: Query<&mut Game>, 
         time: Res<Time>, 
@@ -371,7 +415,7 @@ fn update_game_state(
         mut commands: Commands, 
         show_game_over: Res<crate::ui::SpawnGameOverSystem>,
     ) {
-    if !running.0 {
+    if !(running.0 == AppState::Running) {
         return;
     }
 
@@ -398,7 +442,7 @@ fn update_game_state(
             };
             game_score.change(add_score, nbr_of_lines);
         } else if result.is_err() {
-            running.0 = false;
+            running.0 = AppState::GameOver;
             commands.run_system(show_game_over.0);
         }
         update_cube_color.0 = true;
@@ -433,7 +477,7 @@ fn update_game_state(
             };
             game_score.change(add_score, nbr_of_lines);
         } else if result.is_err() {
-            running.0 = false;
+            running.0 = AppState::GameOver;
             commands.run_system(show_game_over.0);
         }
         game_score.change(SLOW_DROP_SCORE, 0);
@@ -446,7 +490,7 @@ fn update_game_state(
     if keyboard_input.just_pressed(KeyCode::Space) {
         let result = game.tetris.drop_completely_down();
         if result.is_err() {
-            running.0 = false;
+            running.0 = AppState::GameOver;
             commands.run_system(show_game_over.0);
         } else {
             let (nbr_of_dropped_cells, nbr_of_cleared_lines) = result.unwrap();
@@ -490,21 +534,26 @@ fn update_audio(
     score: Res<GameScore>,
     running: Res<IsAppRunning>,
 ) {
-    if !running.0 {
-        return;
-    }
+    match running.0 {
+        AppState::Running => {
+            let Ok(sink) = audio_query.single() else {return};
 
-    let Ok(sink) = audio_query.single() else {return};
+            let mut speed = 1.0;
+            if score.level >= 10 {
+                speed = 1.2;
+            }
+            if score.level >= 15 {
+                speed = (1.4 + 0.2 * (score.level - 15) as f32).max(2.4);
+            } 
 
-    let mut speed = 1.0;
-    if score.level >= 10 {
-        speed = 1.2;
-    }
-    if score.level >= 15 {
-        speed = (1.4 + 0.2 * (score.level - 15) as f32).max(2.4);
-    } 
-
-    sink.set_speed(speed);
+            sink.set_speed(speed);
+        }
+        AppState::Paused => {
+            let Ok(sink) = audio_query.single() else {return};
+            sink.set_speed(0.5);
+        }
+        _ => {}
+    }    
 }
 
 /////////////////// HERE THE HELPER FUNCTIONS AND STRUCTS START /////////////////////////
@@ -586,4 +635,11 @@ impl GameScore {
 }
 
 #[derive(Resource)]
-pub(crate) struct IsAppRunning(pub(crate) bool);
+pub(crate) struct IsAppRunning(pub AppState);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppState {
+    Running, 
+    GameOver, 
+    Paused,
+}

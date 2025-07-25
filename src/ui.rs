@@ -1,9 +1,11 @@
 use bevy::prelude::*;
 use bevy::ecs::system::SystemId;
+use serde::{Serialize, Deserialize};
 
 use crate::engine;
 
 const EMPTY_BACKGROUND_COLOR: bevy::ui::BackgroundColor = BackgroundColor(Color::LinearRgba(LinearRgba { red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0 }));
+const HOVERED_BUTTON_BACKGROUND_COLOR: bevy::ui::BackgroundColor = BackgroundColor(Color::srgb(0.3, 0.3, 0.3));
 const PLAYFIELD_WIDTH_IN_PX: f32 = 400.0;
 
 pub struct MyUiPlugin;
@@ -16,6 +18,10 @@ impl Plugin for MyUiPlugin {
         app.add_systems(Update, update_score);
         app.add_systems(Update, update_level);
         app.add_systems(Update, new_game_button_listener);
+        app.add_systems(Update, audio_button_listener);
+        app.add_systems(Update, key_mapping_button_listener);
+        app.add_systems(Update, display_music_volume_settings);
+        app.add_systems(Update, update_music_volume_settings);
     }
 }
 
@@ -32,6 +38,8 @@ fn setup(
 
     let pause = commands.register_system(spawn_pause_screen);
     commands.insert_resource(SpawnPauseSystem(pause));
+
+    commands.insert_resource(Settings::from_serialized_or_default());
 }
 
 fn spawn_game_over_screen(
@@ -267,14 +275,169 @@ fn generate_pause_screen() -> impl Bundle + use<> {
                 },
             ),
             (   //Settings
-
-            )   //TODO
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    ..Default::default()
+                },
+                children![
+                    generate_top_level_settings_line_element("Audio", AudioButton),
+                    generate_top_level_settings_line_element("Key Mapping", KeyMappingButton), 
+                ],
+            ),
         ],
     )
 }
 
+fn generate_top_level_settings_line_element<T>(text: &str, button_marker: T) -> impl Bundle + use<T> 
+where T: Component {
+    (
+        Node {
+            padding: UiRect::all(Val::Px(5.0)),
+            margin: UiRect::all(Val::Px(15.0)),
+                            
+            ..Default::default()
+        },
+        Button, 
+        button_marker,
+        children![
+            (
+                Text::new(text),
+                TextFont {
+                    font_size: 30.0,
+                    ..Default::default()
+                },
+            ),
+        ],
+    )
+}
+
+fn generate_audio_settings() -> impl Bundle + use<> {
+    (
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_content: AlignContent::Center, 
+            justify_content: JustifyContent::Center,
+            border: UiRect::all(Val::Px(2.0)),
+            ..Default::default()
+        },
+        BorderColor(Color::srgb(0.0, 1.0, 0.0)),
+        children![
+            (
+                Node {
+                    height: Val::Percent(100.0),
+                    align_content: AlignContent::Center, 
+                    justify_content: JustifyContent::Center,
+                    ..Default::default()
+                },
+                children![
+                    Node {
+                        align_content: AlignContent::Center,
+                        justify_content: JustifyContent::Center,
+                        ..Default::default()
+                    },
+                    Text::new("Music Volume: "),
+                ]
+            ),
+            (
+                Node::DEFAULT,
+                Button,
+                DecreaseMusicVolumeButton,
+                BackgroundColor(Color::srgb(0.5, 0.5, 0.5)),
+                children![
+                    Text::new(" - "),
+                ],
+            ),
+            (
+                Node::DEFAULT,
+                Text::new(" ??% "),
+                MusicVolumeTextMarker,
+            ),
+            (
+                Node::DEFAULT,
+                Button,
+                Text::new(" + "),
+                IncreaseMusicVolumeButton,
+                BackgroundColor(Color::srgb(0.5, 0.5, 0.5)),
+            )
+        ]
+    )   //TODO
+}
+
 #[derive(Component)]
 pub struct PausedTopDiv;
+
+#[derive(Component)]
+pub struct MusicVolumeTextMarker;
+
+#[derive(Component)]
+pub struct DecreaseMusicVolumeButton;
+
+#[derive(Component)]
+pub struct IncreaseMusicVolumeButton;
+
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingsTab {
+    Audio, 
+    KeyMapping,
+}
+
+#[derive(Component)]
+pub struct AudioButton;
+
+#[derive(Component)]
+pub struct KeyMappingButton;
+
+fn audio_button_listener(
+    mut button_query: Query<(&Interaction, &mut bevy::ui::BackgroundColor), (Changed<Interaction>, With<Button>, With<AudioButton>)>,
+    mut commands: Commands,
+    mut settings_tab_query: Query<&mut SettingsTab>,
+    paused_top_div_query: Query<Entity, With<PausedTopDiv>>,
+    mut settings: ResMut<Settings>,
+) {
+    let Ok((interaction, mut backgroud_color)) = button_query.single_mut() else {return;};
+
+    match interaction {
+        Interaction::Pressed => {
+            if let Ok(mut settings_tab) = settings_tab_query.single_mut() {
+                if *settings_tab == SettingsTab::Audio {
+                    return;
+                }
+                *settings_tab = SettingsTab::Audio;
+            } else {
+                commands.spawn(SettingsTab::Audio);
+            }
+
+            let Ok(entity) = paused_top_div_query.single() else {return;};
+
+            commands.entity(entity).with_child(generate_audio_settings());
+        }
+        Interaction::Hovered => {
+            *backgroud_color = HOVERED_BUTTON_BACKGROUND_COLOR;
+        }
+        Interaction::None => {
+            *backgroud_color = EMPTY_BACKGROUND_COLOR;
+        }
+    }
+}
+
+fn key_mapping_button_listener(
+    mut button_query: Query<(&Interaction, &mut bevy::ui::BackgroundColor), (Changed<Interaction>, With<Button>, With<KeyMappingButton>)>,
+) {
+    let Ok((interaction, mut backgroud_color)) = button_query.single_mut() else {return;};
+
+    match interaction {
+        Interaction::Pressed => {
+            info!("Key Mapping Button has been pressed!");
+        }
+        Interaction::Hovered => {
+            *backgroud_color = HOVERED_BUTTON_BACKGROUND_COLOR;
+        }
+        Interaction::None => {
+            *backgroud_color = EMPTY_BACKGROUND_COLOR;
+        }
+    }
+}
 
 fn new_game_button_listener(
     mut button_query: Query<(&Interaction, &mut bevy::ui::BackgroundColor), (Changed<Interaction>, With<Button>, With<NewGameButton>)>, 
@@ -288,8 +451,6 @@ fn new_game_button_listener(
 
     match interaction {
         Interaction::Pressed => {
-            info!("Starting new Game");
-
             //reset the playfield
             let Ok(mut game) = game_query.single_mut() else {return;};
             game.tetris = engine::model::Tetris::default();
@@ -310,6 +471,99 @@ fn new_game_button_listener(
         }
         Interaction::None => {
             *background_color = EMPTY_BACKGROUND_COLOR;
+        }
+    }
+}
+
+#[derive(Resource, Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct Settings {
+    pub music_volume: f32,
+}
+
+impl Settings {
+    fn write_to_file(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let _ = std::fs::create_dir("./data");
+
+        //get a file 
+        let file = std::fs::File::create("data/settings.dat")?;
+
+        //serialize and write to file
+        serde_cbor::to_writer(file, &self)?;
+
+        Ok(())
+    }
+
+    fn new_from_serialized() -> Result<Self, Box<dyn std::error::Error>> {
+        //open the file
+        let file = std::fs::File::open("data/settings.dat")?;
+
+        //deserialze 
+        let settings = serde_cbor::from_reader(file)?;
+
+        Ok(settings)
+    }
+
+    fn from_serialized_or_default() -> Self {
+        //try to 
+        let attempt = Settings::new_from_serialized();
+        match attempt {
+            Ok(settings) => {
+                return settings;
+            }
+            Err(err) => {
+                warn!("Could not load user settings. Using default instead. Error: {}", err);
+            }
+        }
+
+        Settings::default()
+    }
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { 
+            music_volume: 0.5,
+        }
+    }
+}
+
+fn display_music_volume_settings(
+    settings: Res<Settings>,
+    mut text_query: Query<&mut Text, With<MusicVolumeTextMarker>>,
+) {
+    let Ok(mut text) = text_query.single_mut() else {return;};
+
+    *text = Text::new(format!(" {:.0} ", settings.music_volume * 100.0));
+}
+
+fn update_music_volume_settings(
+    mut settings: ResMut<Settings>,
+    decrease_query: Query<&Interaction, (Changed<Interaction>, With<Button>, With<DecreaseMusicVolumeButton>)>,
+    increase_query: Query<&Interaction, (Changed<Interaction>, With<Button>, With<IncreaseMusicVolumeButton>)>,
+) {
+    let mut changed = false;
+
+    'decrease: {
+        let Ok(interaction) = decrease_query.single() else {break 'decrease};
+
+        if *interaction == Interaction::Pressed {
+            settings.music_volume = (settings.music_volume - 0.1).max(0.0);
+            changed = true;
+        }
+    }
+
+    'increase: {
+        let Ok(interaction) = increase_query.single() else {break 'increase};
+
+        if *interaction == Interaction::Pressed {
+            settings.music_volume = (settings.music_volume + 0.1).min(1.0);
+            changed = true;
+        }
+    }
+
+    if changed {
+        if let Err(err) = settings.write_to_file() {
+            error!("Could not save current settings. Error: {}", err);
         }
     }
 }

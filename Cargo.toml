@@ -12,3 +12,5 @@ opt-level = 3
 [dependencies]
 bevy = "0.16.1"
 rand = "0.8.5"
+serde = "1.0.219"
+serde_cbor = "0.11.2"

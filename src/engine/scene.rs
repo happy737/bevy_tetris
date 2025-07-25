@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use bevy::audio::Volume;
 use bevy::color::palettes::css::BLACK;
 use bevy::prelude::*;
 
@@ -367,6 +368,7 @@ fn manage_pause(
     mut commands: Commands,
     previous_state_query: Query<(&GamePausedPreviousState, Entity)>,
     paused_top_div_query: Query<Entity, With<crate::ui::PausedTopDiv>>,
+    settings_tap_query: Query<Entity, With<crate::ui::SettingsTab>>,
 ) {
     let state = app_state.0;
     //Game is currently not paused
@@ -395,9 +397,11 @@ fn manage_pause(
             return;
         };
         commands.entity(top_div_entity).despawn();
-    }
 
-    //todo!()
+        for entity in settings_tap_query {
+            commands.entity(entity).despawn();
+        }
+    }
 }
 
 #[derive(Component)]
@@ -415,6 +419,7 @@ fn update_game_state(
         mut commands: Commands, 
         show_game_over: Res<crate::ui::SpawnGameOverSystem>,
     ) {
+        //TODO refactor to use  keyboard_input.get_just_pressed()
     if !(running.0 == AppState::Running) {
         return;
     }
@@ -530,13 +535,14 @@ fn update_game_state(
 }
 
 fn update_audio(
-    audio_query: Query<&AudioSink>,
+    mut audio_query: Query<&mut AudioSink>,
     score: Res<GameScore>,
     running: Res<IsAppRunning>,
+    settings: Res<crate::ui::Settings>,
 ) {
     match running.0 {
         AppState::Running => {
-            let Ok(sink) = audio_query.single() else {return};
+            let Ok(mut sink) = audio_query.single_mut() else {return};
 
             let mut speed = 1.0;
             if score.level >= 10 {
@@ -547,10 +553,12 @@ fn update_audio(
             } 
 
             sink.set_speed(speed);
+            sink.set_volume(Volume::Linear(settings.music_volume));
         }
         AppState::Paused => {
-            let Ok(sink) = audio_query.single() else {return};
+            let Ok(mut sink) = audio_query.single_mut() else {return};
             sink.set_speed(0.5);
+            sink.set_volume(Volume::Linear(settings.music_volume));
         }
         _ => {}
     }    

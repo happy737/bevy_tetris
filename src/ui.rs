@@ -1,4 +1,4 @@
-use bevy::{ecs::system::entity_command::clear, prelude::*};
+use bevy::prelude::*;
 use bevy::ecs::system::SystemId;
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 
@@ -85,10 +85,9 @@ fn clear_keybind_clicks(
 
 fn highlight_clicked_keybind(
     backgrounds_query: Query<(&mut BackgroundColor, &TetrisInstruction, &KeyBindClickArea), With<Button>>,
-    waiting_query: Query<(&WaitingForNewKeyBind, Entity)>,
-    mut commands: Commands,
+    waiting_query: Query<&WaitingForNewKeyBind>,
 ) {
-    let Ok((waiting, entity)) = waiting_query.single() else {
+    let Ok(waiting) = waiting_query.single() else {
         error!("Called 'highlight_clicked_keybind' with no or too many selected clicked keybinds!");
         return;
     };
@@ -98,8 +97,6 @@ fn highlight_clicked_keybind(
             *background = BackgroundColor(Color::srgb(0.5, 0.5, 0.5));
         }
     }
-
-    commands.entity(entity).despawn();
 }
 
 fn generate_screen_window() -> impl Bundle + use<> {
@@ -832,14 +829,14 @@ fn update_secondary_key_bind_settings(
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-struct InstructionKeyBind {
+pub struct InstructionKeyBind {
     action: TetrisInstruction, 
-    primary_key: KeyCode,
-    secondary_key: Option<KeyCode>,
+    pub primary_key: KeyCode,
+    pub secondary_key: Option<KeyCode>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Component)]
-enum TetrisInstruction {
+pub enum TetrisInstruction {
     Drop, 
     FullDrop, 
     Left, 
@@ -869,6 +866,16 @@ impl KeyBinds {
         for instruction_key_bind in &self.key_binds {
             if instruction_key_bind.action == *instruction {
                 return *instruction_key_bind;
+            }
+        }
+
+        panic!("Illegal State. The KeyBinds struct must always feature an entry for every instruction.");
+    }
+
+    pub fn get_mut(&mut self, instruction: &TetrisInstruction) -> &mut InstructionKeyBind {
+        for instruction_key_bind in &mut self.key_binds {
+            if instruction_key_bind.action == *instruction {
+                return instruction_key_bind;
             }
         }
 
@@ -1056,7 +1063,7 @@ fn key_code_to_str(key_code: KeyCode) -> &'static str {
 }
 
 #[derive(Component, Clone, Copy, Debug)]
-struct WaitingForNewKeyBind {
-    primary: u32,
-    selected_tetris_instruction: TetrisInstruction,
+pub struct WaitingForNewKeyBind {
+    pub primary: u32,
+    pub selected_tetris_instruction: TetrisInstruction,
 }

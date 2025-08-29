@@ -9,6 +9,9 @@ use crate::engine;
 use crate::engine::line_stuff::LineListIndex;
 use crate::engine::line_stuff::LineMaterial;
 use crate::engine::model::CellStatus;
+use crate::ui::Settings;
+use crate::ui::TetrisInstruction;
+use crate::ui::WaitingForNewKeyBind;
 
 const ONE_LINE_SCORE: u32 = 100;
 const TWO_LINE_SCORE: u32 = 300;
@@ -415,11 +418,38 @@ fn update_game_state(
         mut update_cube_color: ResMut<RecolorCubes>,
         mut game_score: ResMut<GameScore>,
         mut running: ResMut<IsAppRunning>,
+        mut settings: ResMut<Settings>,
+        assigning_keybind_query: Query<(Entity, &WaitingForNewKeyBind)>,
 
         mut commands: Commands, 
         show_game_over: Res<crate::ui::SpawnGameOverSystem>,
+        clear_keybind_clicks: Res<crate::ui::ClearKeybindClicks>,
     ) {
-        //TODO refactor to use  keyboard_input.get_just_pressed()
+    let key_binds = &mut settings.key_binds;
+    if let Ok((entity, waiting)) = assigning_keybind_query.single() {
+        if let Some(key) = keyboard_input.get_just_pressed().next() {
+            if *key != KeyCode::Escape {
+                match waiting.primary {
+                    1 => {
+                        key_binds.get_mut(&waiting.selected_tetris_instruction).primary_key = *key;
+                    }
+                    2 => {
+                        key_binds.get_mut(&waiting.selected_tetris_instruction).secondary_key = Some(*key);
+                    }
+                    x => {
+                        error!("Illegal state, no more than two keys per action allows. Expected value 1 or 2, got: {x}!");
+                        panic!();
+                    }
+                }
+            }
+
+            commands.entity(entity).despawn();
+            commands.run_system(clear_keybind_clicks.0);
+        }
+
+        return;
+    }
+    
     if !(running.0 == AppState::Running) {
         return;
     }
@@ -456,17 +486,20 @@ fn update_game_state(
     }
 
     //check for moving left
-    if keyboard_input.just_pressed(KeyCode::KeyA) {
+    if keyboard_input.just_pressed(key_binds.get(&TetrisInstruction::Left).primary_key) ||
+            key_binds.get(&TetrisInstruction::Left).secondary_key.is_some_and(|k| keyboard_input.just_pressed(k)) {
         let _ = game.tetris.try_left();
     }
 
     //check for moving right
-    if keyboard_input.just_pressed(KeyCode::KeyD) {
+    if keyboard_input.just_pressed(key_binds.get(&TetrisInstruction::Right).primary_key) ||
+            key_binds.get(&TetrisInstruction::Right).secondary_key.is_some_and(|k| keyboard_input.just_pressed(k)) {
         let _ = game.tetris.try_right();
     }
 
     //drop one level
-    if keyboard_input.just_pressed(KeyCode::KeyS) {
+    if keyboard_input.just_pressed(key_binds.get(&TetrisInstruction::Drop).primary_key) ||
+            key_binds.get(&TetrisInstruction::Drop).secondary_key.is_some_and(|k| keyboard_input.just_pressed(k)) {
         let result = game.tetris.drop();
         if let Ok((false, Some(nbr_of_lines))) = result {
             let add_score = match nbr_of_lines {
@@ -492,7 +525,8 @@ fn update_game_state(
     }
 
     //drop all the way down 
-    if keyboard_input.just_pressed(KeyCode::Space) {
+    if keyboard_input.just_pressed(key_binds.get(&TetrisInstruction::FullDrop).primary_key) ||
+            key_binds.get(&TetrisInstruction::FullDrop).secondary_key.is_some_and(|k| keyboard_input.just_pressed(k)) {
         let result = game.tetris.drop_completely_down();
         if result.is_err() {
             running.0 = AppState::GameOver;
@@ -518,17 +552,20 @@ fn update_game_state(
     }
 
     //spin active piece counterclockwise
-    if keyboard_input.just_pressed(KeyCode::KeyQ) {
+    if keyboard_input.just_pressed(key_binds.get(&TetrisInstruction::RotateCounter).primary_key) ||
+            key_binds.get(&TetrisInstruction::RotateCounter).secondary_key.is_some_and(|k| keyboard_input.just_pressed(k)) {
         game.tetris.spin_counter_90();
     }
 
     //spin active piece clockwise
-    if keyboard_input.just_pressed(KeyCode::KeyE) {
+    if keyboard_input.just_pressed(key_binds.get(&TetrisInstruction::RotateClock).primary_key) ||
+            key_binds.get(&TetrisInstruction::RotateClock).secondary_key.is_some_and(|k| keyboard_input.just_pressed(k)) {
         game.tetris.spin_clock_90();
     }
 
     //switch active peace with stored piece
-    if keyboard_input.just_pressed(KeyCode::KeyW) {
+    if keyboard_input.just_pressed(key_binds.get(&TetrisInstruction::Store).primary_key) ||
+            key_binds.get(&TetrisInstruction::Store).secondary_key.is_some_and(|k| keyboard_input.just_pressed(k)) {
         let _ = game.tetris.try_switch_active_piece();
         update_cube_color.0 = true;
     }

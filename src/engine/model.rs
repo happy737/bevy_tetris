@@ -1,4 +1,3 @@
-use bevy::log::info;
 use rand::Rng;
 use rand::seq::SliceRandom;
 
@@ -219,7 +218,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
     }
 
     pub fn drop(&mut self) -> Result<(bool, Option<u32>), ()> {
-        let drop_result = Tetris::<T>::try_drop(&mut self.field, &mut self.active_piece);
+        //let drop_result = Tetris::<T>::try_drop(&mut self.field, &mut self.active_piece);
+        let drop_result = Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Down);
         match drop_result {
             Ok(_) => {
                 //successfull drop, nothing else to be done
@@ -677,8 +677,6 @@ struct Pos2f {
 }
 
 impl Pos2f {
-    const ZERO: Pos2f = Pos2f{x: 0.0, y: 0.0};
-
     fn new(x: f32, y: f32) -> Self {
         Self {
             x, 

@@ -1,4 +1,6 @@
 //#![windows_subsystem = "windows"]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
 
 use bevy::prelude::*;
 

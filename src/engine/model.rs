@@ -116,33 +116,9 @@ impl<T: Rng + Sized + Send> Tetris<T> {
             }
         }
 
-        // let mut phys_tetromino = match tetromino {
-        //     Tetromino::O => {
-        //         PhysicalTetromino::new(tetromino, CellStatus::Yellow) + Pos2::new(half_width as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-        //     }
-        //     Tetromino::Line => {
-        //         PhysicalTetromino::new(tetromino, CellStatus::Cyan) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-        //     }
-        //     Tetromino::T => {
-        //         PhysicalTetromino::new(tetromino, CellStatus::Purple) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-        //     }
-        //     Tetromino::L => {
-        //         PhysicalTetromino::new(tetromino, CellStatus::Orange) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-        //     }
-        //     Tetromino::J => {
-        //         PhysicalTetromino::new(tetromino, CellStatus::Blue) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-        //     }
-        //     Tetromino::S => {
-        //         PhysicalTetromino::new(tetromino, CellStatus::Green) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-        //     }
-        //     Tetromino::Z => {
-        //         PhysicalTetromino::new(tetromino, CellStatus::Red) + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32)
-        //     }
-        // };
-
-        if Tetris::<T>::try_drop(field, &mut phys_tetromino).is_ok()
+        if Tetris::<T>::try_move(field, &mut phys_tetromino, Direction::Down).is_ok()
                 && tetromino != Tetromino::Line {
-            let _ = Tetris::<T>::try_drop(field, &mut phys_tetromino);
+            let _ = Tetris::<T>::try_move(field, &mut phys_tetromino, Direction::Down);
         }
 
         phys_tetromino
@@ -171,49 +147,6 @@ impl<T: Rng + Sized + Send> Tetris<T> {
             Tetromino::Z => {
                 PhysicalTetromino::new(tetromino, CellStatus::Red)
             }
-        }
-    }
-
-    fn try_drop(field: &mut TetrisField, tetromino: &mut PhysicalTetromino) -> Result<(), ()> {
-        //remove active tetromino from temporary copy
-        let mut field_copy = field.clone();
-        for pos in tetromino.coords {
-            if let Some(cell) = field_copy.get_mut(pos.x, pos.y) {
-                *cell = CellStatus::Empty;
-            }
-        }
-
-        //check if temporary copy has place for active tetromino one below
-        let tetromino_copy = (tetromino.clone() - Pos2::new(0, 1))?;
-        let mut is_new_place_free = true;
-        for pos in tetromino_copy.coords {
-            if let Some(cell) = field_copy.get(pos.x, pos.y) {
-                if cell != CellStatus::Empty {
-                    is_new_place_free = false;
-                    break;
-                }
-            }
-        }
-
-        //drop if possible, else return error
-        if is_new_place_free {
-            //clear previous positions
-            for pos in tetromino.coords {
-                if let Some(cell) = field.get_mut(pos.x, pos.y) {
-                    *cell = CellStatus::Empty;
-                }
-            }
-            //move tetromino
-            *tetromino = (*tetromino - Pos2::new(0, 1)).unwrap();
-            //fill new positions
-            for pos in tetromino.coords {
-                if let Some(cell) = field.get_mut(pos.x, pos.y) {
-                    *cell = tetromino.color;
-                }
-            }
-            Ok(())
-        } else {
-            Err(())
         }
     }
 
@@ -267,8 +200,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
     }
 
     fn check_move(field: &TetrisField, tetromino: &PhysicalTetromino, direction: Direction) -> Result<(), ()> {
-        let mut field_copy = field.clone();
-        let mut tetromino_copy = tetromino.clone();
+        let mut field_copy = *field;
+        let mut tetromino_copy = *tetromino;
 
         //remove previous cells
         for pos in tetromino_copy.coords {
@@ -413,8 +346,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         if self.check_spin(spin_direction).is_err() {
             let tetromino_original = self.active_piece;
             let field_original = self.field;
-            let tetromino_copy = tetromino_original.clone();
-            let field_copy = field_original.clone();
+            let tetromino_copy = tetromino_original;
+            let field_copy = field_original;
             self.active_piece = tetromino_copy;
             self.field = field_copy;
 
@@ -450,8 +383,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
     }
 
     fn check_spin(&self, spin_direction: SpinDirection) -> Result<(), ()> {
-        let mut field_copy = self.field.clone();
-        let mut tetromino_copy = self.active_piece.clone();
+        let mut field_copy = self.field;
+        let mut tetromino_copy = self.active_piece;
 
         //clear previous position
         for pos in tetromino_copy.coords {

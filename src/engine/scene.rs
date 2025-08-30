@@ -145,11 +145,14 @@ fn setup(mut commands: Commands,
     // ));
 }
 
+/// A wrapper struct for the Tetris model. 
 #[derive(Clone, Component, Debug, Default)]
 pub struct Game {
     pub tetris: engine::model::Tetris<rand::rngs::OsRng>,
 }
 
+/// Adds new colored cubes for every new cell and removes all cubes for cells that have disappeared. 
+/// Manages only the main playfield. 
 fn display_game_state(
         mut commands: Commands, 
         game_query: Query<&Game>, 
@@ -207,6 +210,8 @@ fn display_game_state(
     update_cube_color.0 = false;
 }
 
+/// Adds new colored cubes for every new cell and removes all cubes for cells that have disappeared. 
+/// Manages only the next piece. 
 fn display_next_piece(
     mut commands: Commands, 
     game_query: Query<&Game>, 
@@ -258,6 +263,8 @@ fn display_next_piece(
     }
 }
 
+/// Adds new colored cubes for every new cell and removes all cubes for cells that have disappeared. 
+/// Manages only the stored piece. 
 fn display_stored_piece(
     mut commands: Commands, 
     game_query: Query<&Game>, 
@@ -309,6 +316,8 @@ fn display_stored_piece(
     }
 }
 
+/// Adds new line cubes for every new cell and removes all line cubes for cells that have disappeared. 
+/// Manages only the gost piece. 
 fn display_ghost_piece(
     mut commands: Commands, 
     game_query: Query<&Game>, 
@@ -364,6 +373,7 @@ fn display_ghost_piece(
     }
 }
 
+/// Activates and deactivates the pause screen upon a press of the Escape key. 
 fn manage_pause(
     mut app_state: ResMut<IsAppRunning>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -407,9 +417,14 @@ fn manage_pause(
     }
 }
 
+/// The gamestate previous to the pausing of the game. 
 #[derive(Component)]
 struct GamePausedPreviousState(AppState);
 
+/// Only runs upon updating keybinds or when the game is running. When updating keybinds, assigns the
+/// new key or when pressing Escape cancels the assigning process. Otherwise updates the game by 
+/// translating user input to API calls and automatically dropping down pieces by ticking the here-
+/// managed-timer. 
 fn update_game_state(
         game_query: Query<&mut Game>, 
         time: Res<Time>, 
@@ -571,6 +586,7 @@ fn update_game_state(
     }
 }
 
+/// Updates audio speed and volume. 
 fn update_audio(
     mut audio_query: Query<&mut AudioSink>,
     score: Res<GameScore>,
@@ -603,12 +619,14 @@ fn update_audio(
 
 /////////////////// HERE THE HELPER FUNCTIONS AND STRUCTS START /////////////////////////
 
+/// Determines the amnount of time between individual drops based on the level. 
 fn level_to_drop_duration(level: u32) -> f64 {
     let level = level as f64;
 
     (BASE_DROP_DURATION_SECS - level * 0.05).max(0.05)
 }
 
+/// A 2d integer position struct. 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct CellPosition {
     x: i32, 
@@ -634,36 +652,47 @@ impl From<CellPosition> for Vec3 {
     }
 }
 
+/// A handle to the cube mesh. 
 #[derive(Resource)]
 struct CubeHandle(Handle<Mesh>);
 
+/// A handle to the line cube mesh. 
 #[derive(Resource)]
 struct LineCubeHandle(Handle<Mesh>);
 
+/// A handle to the materials for the individual colors of tetrominoes. 
 #[derive(Resource)]
 struct MaterialsHandle(HashMap<engine::model::CellStatus, Handle<StandardMaterial>>);
 
+/// A handle to the material of line cubes. 
 #[derive(Resource)]
 struct LineMaterialHandle(Handle<LineMaterial>);
 
+/// The timer that determines when the active piece next drops. 
 #[derive(Resource)]
 struct DropTimer(Timer);
 
+/// Flag wether in the next pass all cube colors should be overwritten. 
 #[derive(Resource)]
 struct RecolorCubes(bool);
 
+/// Marks a cube entity as a cube on the main field.
 #[derive(Component)]
 struct MainPixelMarker;
 
+/// Marks a cube entity as a next piece cube. 
 #[derive(Component)]
 struct NextPixelMarker;
 
+/// Marks a cube entity as a stored piece cube. 
 #[derive(Component)]
 struct StoredPixelMarker;
 
+/// Marks a line cube entity as a ghost piece cube. 
 #[derive(Component)]
 struct GhostPixelMarker;
 
+/// A struct that holds the users score. 
 #[derive(Debug, Default, Resource)]
 pub struct GameScore {
     pub score: u32,
@@ -672,6 +701,7 @@ pub struct GameScore {
 }
 
 impl GameScore {
+    /// Add specified score and lines to the score without corrupting inner state. 
     fn change(&mut self, add_score: u32, add_lines: u32) {
         self.score += add_score;
         self.cleared_lines += add_lines;
@@ -679,9 +709,11 @@ impl GameScore {
     }
 }
 
+/// The component wrapper for the current state of the tetris game. 
 #[derive(Resource)]
 pub(crate) struct IsAppRunning(pub AppState);
 
+/// The possible states the tetris game can be in. 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppState {
     Running, 

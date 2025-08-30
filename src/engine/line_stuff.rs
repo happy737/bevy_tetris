@@ -25,6 +25,7 @@ pub struct LineListIndex {
 }
 
 impl LineListIndex {
+    /// Returns an object shaped like a cube. 
     pub fn cube() -> Self {
         Self {
             points: vec![
@@ -54,6 +55,7 @@ impl From<LineListIndex> for Mesh {
     }
 }
 
+/// The material for a line object. Contains simply a color. 
 #[derive(Asset, TypePath, Default, AsBindGroup, Debug, Clone)]
 pub struct LineMaterial {
     #[uniform(0)]

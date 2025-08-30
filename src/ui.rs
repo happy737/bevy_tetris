@@ -51,30 +51,37 @@ fn setup(
     commands.insert_resource(Settings::from_serialized_or_default());
 }
 
+/// One shot function which spawns the game over screen. 
 fn spawn_game_over_screen(
     mut commands: Commands,
 ) {
     commands.spawn(generate_game_over_screen());
 }
 
+/// One shot function which spawns the pause game screen. 
 fn spawn_pause_screen(
     mut commands: Commands,
 ) {
     commands.spawn(generate_pause_screen());
 }
 
+/// A resource which holds the id of the spawn_game_over_screen function. 
 #[derive(Resource)]
 pub(crate) struct SpawnGameOverSystem(pub SystemId);
 
+/// A resource which holds the id of the spawn_pause_screen function. 
 #[derive(Resource)]
 pub struct SpawnPauseSystem(pub SystemId);
 
+/// A resource which holds the id of the clear_keybind_click function. 
 #[derive(Resource)]
 pub struct ClearKeybindClicks(pub SystemId);
 
+/// A resource which holds the id of the highlight_clicked_keybind function. 
 #[derive(Resource)]
 pub struct HighlghtClickedKeybind(pub SystemId);
 
+/// One shot function which clears all backgrounds of the individual key bind settings fields. 
 fn clear_keybind_clicks(
     backgrounds_query: Query<&mut BackgroundColor, (With<TetrisInstruction>, With<Button>)>,
 ) {
@@ -83,6 +90,7 @@ fn clear_keybind_clicks(
     }
 }
 
+/// One shot function which changes the background of the clicked key bind settings field. 
 fn highlight_clicked_keybind(
     backgrounds_query: Query<(&mut BackgroundColor, &TetrisInstruction, &KeyBindClickArea), With<Button>>,
     waiting_query: Query<&WaitingForNewKeyBind>,
@@ -99,6 +107,7 @@ fn highlight_clicked_keybind(
     }
 }
 
+/// Generates the UI setup for the general in game UI. 
 fn generate_screen_window() -> impl Bundle + use<> {
     (
         Node {
@@ -110,12 +119,16 @@ fn generate_screen_window() -> impl Bundle + use<> {
         },
         EMPTY_BACKGROUND_COLOR,
         children![
+            //empty padding on top
             generate_pad_window(Val::Percent(100.0), Val::Percent(55.0)),
+            
+            //scoreboard content which is pushed down to about halfway
             generate_centered_strip_window(),
         ],
     )
 }
 
+/// Creates an empty UI "div" with the specified width and height to serve as padding. 
 fn generate_pad_window(width: Val, height: Val) -> impl Bundle + use<> {
     (
         Node {
@@ -128,6 +141,9 @@ fn generate_pad_window(width: Val, height: Val) -> impl Bundle + use<> {
     )
 }
 
+/// Creates an empty UI "div" specifically for the scoreboard ui. It contains a special 
+/// marker component [HorizontalPadMarker] for continuous width adjustment when resizing
+/// the window. 
 fn generate_horizontal_pad_window() -> impl Bundle + use<> {
     (
         Node {
@@ -141,9 +157,12 @@ fn generate_horizontal_pad_window() -> impl Bundle + use<> {
     )
 }
 
+/// The specialized marker to continuously update the position of the scoreboard when 
+/// resizing the window. 
 #[derive(Component)]
 struct HorizontalPadMarker;
 
+/// Creates the second horizontal UI component.  
 fn generate_centered_strip_window() -> impl Bundle + use<> {
     (
         Node {
@@ -154,14 +173,17 @@ fn generate_centered_strip_window() -> impl Bundle + use<> {
             ..Default::default()
         },
         EMPTY_BACKGROUND_COLOR,
-        BorderColor(Color::LinearRgba(LinearRgba::GREEN)),
+        //BorderColor(Color::LinearRgba(LinearRgba::GREEN)),
         children![
+            //padding for the main content
             generate_horizontal_pad_window(),
+            //the small "scoreboard" 
             main_content_window(),
         ],
     )
 }
 
+/// Creates the "scoreboard" UI "div". 
 fn main_content_window() -> impl Bundle + use<> {
     (
         Node {
@@ -182,6 +204,8 @@ fn main_content_window() -> impl Bundle + use<> {
     )
 }
 
+/// Continuously updates the horizontal pad for the main content div to account for 
+/// window resizing. 
 fn update_horizontal_pad_window_width(
     window_query: Query<&Window>,
     mut node_query: Query<&mut Node, With<HorizontalPadMarker>>,
@@ -198,6 +222,8 @@ fn update_horizontal_pad_window_width(
     node.max_width = value;
 }
 
+/// Creates a UI component containing some text and its respective marker, allowing 
+/// it to be updated.  
 fn generate_text_window<T>(text: &str, text_marker: T) -> impl Bundle + use<T> 
 where T: Component {
     (
@@ -212,9 +238,12 @@ where T: Component {
     )
 }
 
+/// The marker to change the players score. 
 #[derive(Component)]
 struct ScoreTextMarker;
 
+/// Continuously updates the users score with the score from the [engine::scene::GameScore] 
+/// entity. 
 fn update_score(
     score: Res<engine::scene::GameScore>,
     text_query: Query<&mut Text, With<ScoreTextMarker>>,
@@ -224,9 +253,12 @@ fn update_score(
     }
 }
 
+/// The marker to change the players level. 
 #[derive(Component)]
 struct LevelTextMarker;
 
+/// Continuously updates the users level with the level from the [engine::scene::GameScore] 
+/// entity. 
 fn update_level(
     score: Res<engine::scene::GameScore>,
     text_query: Query<&mut Text, With<LevelTextMarker>>,
@@ -236,6 +268,7 @@ fn update_level(
     }
 }
 
+/// Creates the entire screen spanning game over screen UI component. 
 fn generate_game_over_screen() -> impl Bundle + use<> {
     (
         Node {
@@ -286,12 +319,15 @@ fn generate_game_over_screen() -> impl Bundle + use<> {
     )
 }
 
+/// The marker to mark the new game button. 
 #[derive(Component)]
 struct NewGameButton;
 
+/// The marker for the screen spanning div of the game over screen. 
 #[derive(Component)]
 struct NewGameTopDiv;
 
+/// Creates the pause menu screen UI component. 
 fn generate_pause_screen() -> impl Bundle + use<> {
     (
         Node {
@@ -328,6 +364,8 @@ fn generate_pause_screen() -> impl Bundle + use<> {
     )
 }
 
+/// Creates the UI buttons which will select which settings will be shown in the pause game
+/// menu. 
 fn generate_top_level_settings_line_element<T>(text: &str, button_marker: T) -> impl Bundle + use<T> 
 where T: Component {
     (
@@ -351,6 +389,7 @@ where T: Component {
     )
 }
 
+/// Creates the UI components which will form the audio settings. 
 fn generate_audio_settings() -> impl Bundle + use<> {
     (
         Node {
@@ -409,6 +448,7 @@ fn generate_audio_settings() -> impl Bundle + use<> {
     )   //TODO
 }
 
+/// Creates the UI components which will form the settings for a single action keybind. 
 fn generate_single_key_bind_entry(action_description: &str, instruction: TetrisInstruction) -> impl Bundle + use<> {
     (
         Node {
@@ -477,6 +517,7 @@ fn generate_single_key_bind_entry(action_description: &str, instruction: TetrisI
     )
 }
 
+/// Creates the UI component of the entire key bind settings. 
 fn generate_key_bind_menu() -> impl Bundle + use<> {
     (
         Node {
@@ -497,42 +538,57 @@ fn generate_key_bind_menu() -> impl Bundle + use<> {
     )
 }
 
+/// A marker which marks the paused screen top div. 
 #[derive(Component)]
 pub struct PausedTopDiv;
 
+/// Differentiates which key for a specific action is meant. The value it holds theoretically 
+/// suppoers u32 many different keybinds but in practice only two are used. This is simply
+/// future proofing for when unlimited keys for a single action are allowed. 
 #[derive(Component)]
 pub struct KeyBindClickArea(u32);
 
+/// A marker which marks the text of the music volume. 
 #[derive(Component)]
 pub struct MusicVolumeTextMarker;
 
+/// A marker which marks the button to decrease the music volume. 
 #[derive(Component)]
 pub struct DecreaseMusicVolumeButton;
 
+/// A marker which marks the button to increase the music volume. 
 #[derive(Component)]
 pub struct IncreaseMusicVolumeButton;
 
+/// Differentiates the existing settings categories into their tabs.  
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsTab {
     Audio, 
     KeyMapping,
 }
 
+/// A marker which marks the audio settings button. 
 #[derive(Component)]
 pub struct AudioButton;
 
+/// A marker which marks the keybind settings button. 
 #[derive(Component)]
 pub struct KeyMappingButton;
 
+/// A marker which marks which part of the pause menu are children that can be removed 
+/// when switchting the active settings tab. 
 #[derive(Component)]
 pub struct PauseMenuRemovableChildren;
 
+/// A marker which marks the text in the primary keybind button. 
 #[derive(Component)]
 pub struct FirstKeyBindTextMarker;
 
+/// A marker which marks the text in the secondary keybind button. 
 #[derive(Component)]
 pub struct SecondKeyBindTextMarker;
 
+/// Removes the currently selected settings tab via [PauseMenuRemovableChildren]. 
 fn remove_settings_children(
     query: Query<Entity, With<PauseMenuRemovableChildren>>,
     commands: &mut Commands,
@@ -542,6 +598,7 @@ fn remove_settings_children(
     }
 }
 
+/// Implements the button functionality for selecting the audio settings tab. 
 fn audio_button_listener(
     mut button_query: Query<(&Interaction, &mut bevy::ui::BackgroundColor), (Changed<Interaction>, With<Button>, With<AudioButton>)>,
     mut commands: Commands,
@@ -576,6 +633,7 @@ fn audio_button_listener(
     }
 }
 
+/// Implements the button functionality for selecting the key mapping settings tab.  
 fn key_mapping_button_listener(
     mut button_query: Query<(&Interaction, &mut bevy::ui::BackgroundColor), (Changed<Interaction>, With<Button>, With<KeyMappingButton>)>,
     mut commands: Commands,
@@ -610,6 +668,7 @@ fn key_mapping_button_listener(
     }
 }
 
+/// Implements the button functionality for starting a new game. 
 fn new_game_button_listener(
     mut button_query: Query<(&Interaction, &mut bevy::ui::BackgroundColor), (Changed<Interaction>, With<Button>, With<NewGameButton>)>, 
     mut game_query: Query<&mut engine::scene::Game>,
@@ -646,6 +705,7 @@ fn new_game_button_listener(
     }
 }
 
+/// Implements the button functionality for a single keybind area. 
 fn individual_keybind_button_listener(
     mut button_query: Query<(&TetrisInstruction, &mut BackgroundColor, &Interaction, &KeyBindClickArea), (Changed<Interaction>, With<Button>)>,
     mut commands: Commands,
@@ -655,8 +715,6 @@ fn individual_keybind_button_listener(
 ) {
     for (instruction, mut background_color, interaction, keybind_click_area) in &mut button_query {
         if *interaction == Interaction::Pressed{
-            info!("Clicked!");
-
             //remove previous waiting component
             if let Ok(entity) = waiting_query.single() {    //theoretically, no more than one should ever exist concurrently
                 commands.entity(entity).despawn();
@@ -676,6 +734,8 @@ fn individual_keybind_button_listener(
     }
 }
 
+/// The struct that holds the general settings of the bevy engine game: audio and 
+/// keybinds. 
 #[derive(Resource, Clone, Debug)]
 pub struct Settings {
     pub music_volume: f32,
@@ -683,6 +743,8 @@ pub struct Settings {
 }
 
 impl Settings {
+    /// Tries to save the settings to the data/settings.dat file. Returns Err 
+    /// if any problems appear. 
     fn write_to_file(&self) -> Result<(), Box<dyn std::error::Error>> {
         let _ = std::fs::create_dir("./data");
 
@@ -695,6 +757,8 @@ impl Settings {
         Ok(())
     }
 
+    /// Reads the settings from the data/settings.dat file. Returns Err if
+    /// any problems appear. 
     fn new_from_serialized() -> Result<Self, Box<dyn std::error::Error>> {
         //open the file
         let file = std::fs::File::open("data/settings.dat")?;
@@ -705,6 +769,8 @@ impl Settings {
         Ok(settings)
     }
 
+    /// Reads the settings from the file. If this fails (as it does when first
+    /// starting the game), uses default values instead. 
     fn from_serialized_or_default() -> Self {
         //try to 
         let attempt = Settings::new_from_serialized();
@@ -762,6 +828,7 @@ impl Default for Settings {
     }
 }
 
+/// Updates the displayed volume text. 
 fn display_music_volume_settings(
     settings: Res<Settings>,
     mut text_query: Query<&mut Text, With<MusicVolumeTextMarker>>,
@@ -771,6 +838,7 @@ fn display_music_volume_settings(
     *text = Text::new(format!(" {:.0} ", settings.music_volume * 100.0));
 }
 
+/// Implements the button functionalities for the decrease and increase music volume button. s
 fn update_music_volume_settings(
     mut settings: ResMut<Settings>,
     decrease_query: Query<&Interaction, (Changed<Interaction>, With<Button>, With<DecreaseMusicVolumeButton>)>,
@@ -803,9 +871,9 @@ fn update_music_volume_settings(
     }
 }
 
+/// Updates the primary key bind settings button texts with the values found in the settings. 
 fn update_primary_key_bind_settings(
     primary_text_query: Query<(&TetrisInstruction, &mut Text), With<FirstKeyBindTextMarker>>,
-    //secondary_text_query: Query<(&TetrisInstruction, &mut Text), (With<SecondKeyBindTextMarker>, Without<FirstKeyBindTextMarker>)>,
     settings: Res<Settings>,
 ) {
     for (action, mut text) in primary_text_query {
@@ -814,6 +882,7 @@ fn update_primary_key_bind_settings(
     }
 }
 
+/// Updates the secondary key bind settings button texts with the values found in the settings. 
 fn update_secondary_key_bind_settings(
     secondary_text_query: Query<(&TetrisInstruction, &mut Text), With<SecondKeyBindTextMarker>>,
     settings: Res<Settings>,
@@ -828,6 +897,7 @@ fn update_secondary_key_bind_settings(
     }
 }
 
+/// A struct that contains all keybinds for a specific Instruction. 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct InstructionKeyBind {
     action: TetrisInstruction, 
@@ -835,6 +905,7 @@ pub struct InstructionKeyBind {
     pub secondary_key: Option<KeyCode>,
 }
 
+/// Differentiates which kind of instructions specific to a tetris game can give. 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Component)]
 pub enum TetrisInstruction {
     Drop, 
@@ -856,12 +927,14 @@ impl InstructionKeyBind {
     }
 }
 
+/// A struct that holds the keybinds for ALL [TetrisInstruction]s. 
 #[derive(Clone, Debug)]
 pub struct KeyBinds {
     key_binds: Vec<InstructionKeyBind>,
 }
 
 impl KeyBinds {
+    /// Returns a copy of the [InstructionKeyBind] for the given [TetrisInstruction]. 
     pub fn get(&self, instruction: &TetrisInstruction) -> InstructionKeyBind {
         for instruction_key_bind in &self.key_binds {
             if instruction_key_bind.action == *instruction {
@@ -872,6 +945,7 @@ impl KeyBinds {
         panic!("Illegal State. The KeyBinds struct must always feature an entry for every instruction.");
     }
 
+    /// Returns a mutable referente of the [InstructionKeyBind] for the given [TetrisInstruction].
     pub fn get_mut(&mut self, instruction: &TetrisInstruction) -> &mut InstructionKeyBind {
         for instruction_key_bind in &mut self.key_binds {
             if instruction_key_bind.action == *instruction {
@@ -907,6 +981,8 @@ impl Default for KeyBinds {
     }
 }
 
+/// A helper struct for deserializing [KeyBinds]. This struct can at points not have all
+/// [TetrisInstruction]s logged. 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct KeyBindsSerialized {
     key_binds: Vec<InstructionKeyBind>,
@@ -937,6 +1013,8 @@ impl From<KeyBindsSerialized> for KeyBinds {
     }
 }
 
+/// Maps a [KeyCode] to a string slice. Substitutes the Display function as it is not 
+/// implemented and the debug format is not user readable. 
 fn key_code_to_str(key_code: KeyCode) -> &'static str {
     match key_code {
         KeyCode::KeyA => "A",
@@ -1062,6 +1140,8 @@ fn key_code_to_str(key_code: KeyCode) -> &'static str {
     }
 }
 
+/// An entity which signals that the game is currently waiting for a button input from 
+/// the user to save as a new keybind. 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct WaitingForNewKeyBind {
     pub primary: u32,

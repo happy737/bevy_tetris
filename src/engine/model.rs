@@ -7,9 +7,12 @@ pub const TETRIS_FIELD_DEFAULT_HEIGHT: u32 = 20;
 const TETRIS_FIELD_LENGTH: usize = (TETRIS_FIELD_DEFAULT_WIDTH * TETRIS_FIELD_DEFAULT_HEIGHT) as usize;
 
 
+/// The main Tetris struct of the underlying model. This model is independent of the rest of the bevy engine 
+/// usage and could theoretically without much effort be ported to another user wrapper. This model is 
+/// completely inert and has to be interacted with via its public interface. 
 #[derive(Clone, Debug)]
 pub struct Tetris<T: Rng + Sized + Send> {
-    pub field: TetrisField,
+    field: TetrisField,
     active_piece: PhysicalTetromino,
     next_piece: PhysicalTetromino,
     stored_piece: PhysicalTetromino,
@@ -19,6 +22,8 @@ pub struct Tetris<T: Rng + Sized + Send> {
 }
 
 impl<T: Rng + Sized + Send> Tetris<T> {
+    /// Creates a new instance. Takes a random number generator as argument for possible repeatability with a 
+    /// given seed. The active, next and stored piece are immediately determined using the rng. 
     pub fn new(rng: T) -> Self {
         let mut iterator = TetrominoIterator::new(rng);
         let mut field = [CellStatus::Empty; TETRIS_FIELD_LENGTH].into();
@@ -38,6 +43,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         }
     }
 
+    /// Tries to switch the active piece. Returns Err when piece has already been switched before the active 
+    /// piece has been dropped.
     pub fn try_switch_active_piece(&mut self) -> Result<(), ()> {
         if self.switchted_active_piece_since_last_drop {
             return Err(());
@@ -58,6 +65,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         Ok(())
     }
 
+    /// Returns a list of all occupied cells in the tetris field, along with which piece occupies it. The lower
+    /// left corner of its possible positions is its (0, 0) point. 
     pub fn get_block_list(&self) -> Vec<(CellStatus, u32, u32)> {
         let mut vec = Vec::new();
 
@@ -73,6 +82,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         vec
     }
 
+    /// Returns the list of 4 cells occupied by the next block. The lower left corner of possible positions is
+    /// its (0, 0) point. 
     pub fn get_next_block_list(&self) -> [(CellStatus, u32, u32); 4] {
         let mut arr: [(CellStatus, u32, u32); 4] = [(CellStatus::Empty, 0, 0); 4];
         
@@ -83,6 +94,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         arr
     }
 
+    /// Returns the list of 4 cells occupied by the stored block. 
     pub fn get_stored_block_list(&self) -> [(CellStatus, u32, u32); 4] {
         let mut arr: [(CellStatus, u32, u32); 4] = [(CellStatus::Empty, 0, 0); 4];
         
@@ -93,6 +105,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         arr
     }
 
+    /// Returns the list of 4 cells occupied by the ghost block. 
     pub fn get_ghost_piece_list(&self) -> [(u32, u32); 4] {
         let mut arr = [(0, 0); 4];
         
@@ -103,53 +116,9 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         arr
     }
 
-    fn place_tetromino_on_field(field: &mut TetrisField, tetromino: Tetromino) -> PhysicalTetromino {
-        let half_width = TETRIS_FIELD_DEFAULT_WIDTH / 2 - 1;
-
-        let mut phys_tetromino = Tetris::<T>::tetromino_to_physical(tetromino);
-        match phys_tetromino.tetromino {
-            Tetromino::O => {
-                phys_tetromino = phys_tetromino + Pos2::new(half_width as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32);
-            }
-            Tetromino::Line | Tetromino::T | Tetromino::L | Tetromino::J | Tetromino::S | Tetromino::Z => {
-                phys_tetromino = phys_tetromino + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32);
-            }
-        }
-
-        if Tetris::<T>::try_move(field, &mut phys_tetromino, Direction::Down).is_ok()
-                && tetromino != Tetromino::Line {
-            let _ = Tetris::<T>::try_move(field, &mut phys_tetromino, Direction::Down);
-        }
-
-        phys_tetromino
-    }
-
-    fn tetromino_to_physical(tetromino: Tetromino) -> PhysicalTetromino {
-        match tetromino {
-            Tetromino::O => {
-                PhysicalTetromino::new(tetromino, CellStatus::Yellow)
-            }
-            Tetromino::Line => {
-                PhysicalTetromino::new(tetromino, CellStatus::Cyan)
-            }
-            Tetromino::T => {
-                PhysicalTetromino::new(tetromino, CellStatus::Purple)
-            }
-            Tetromino::L => {
-                PhysicalTetromino::new(tetromino, CellStatus::Orange)
-            }
-            Tetromino::J => {
-                PhysicalTetromino::new(tetromino, CellStatus::Blue)
-            }
-            Tetromino::S => {
-                PhysicalTetromino::new(tetromino, CellStatus::Green)
-            }
-            Tetromino::Z => {
-                PhysicalTetromino::new(tetromino, CellStatus::Red)
-            }
-        }
-    }
-
+    /// Tries to drop the piece. Returns Err if the dropped piece was above the playingfield. This signals the 
+    /// end of the round. If the drop was successfull returns true for nothing else happening and false for 
+    /// some cleared lines, along with the number. 
     pub fn drop(&mut self) -> Result<(bool, Option<u32>), ()> {
         //let drop_result = Tetris::<T>::try_drop(&mut self.field, &mut self.active_piece);
         let drop_result = Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Down);
@@ -178,27 +147,108 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         }
     }
 
-    fn refresh_ghost_piece(&mut self) {
-        self.ghost_piece = Tetris::<T>::find_ghost_piece_pos(&self.field, &self.active_piece);
-    }
-
-    fn next_piece(&mut self) {
-        self.active_piece = Tetris::<T>::place_tetromino_on_field(&mut self.field, self.next_piece.tetromino);
-        self.next_piece = Tetris::<T>::tetromino_to_physical((&mut self.iterator).next().unwrap());
-    }
-
+    /// Tries to move the piece to the left. Returns Ok if successfull, Err otherwise.
     pub fn try_left(&mut self) -> Result<(), ()> {
         Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Left)?;
         self.refresh_ghost_piece();
         Ok(())
     }
 
+    /// Tries to move the piece to the right. Returns Ok if successfull, Err otherwise. 
     pub fn try_right(&mut self) -> Result<(), ()> {
         Tetris::<T>::try_move(&mut self.field, &mut self.active_piece, Direction::Right)?;
         self.refresh_ghost_piece();
         Ok(())
     }
+    
+    /// Tries to drop the piece all the way down. Returns Err if the piece ended up above the playfield, 
+    /// thereby ending the game. Else returns Ok(number of dropped cells, number of cleared lines). 
+    pub fn drop_completely_down(&mut self) -> Result<(u32, u32), ()> {
+        let mut dropped_cell_counter = 0;
+        loop {
+            let result = self.drop()?;
+            if let (false, Some(nbr_of_cleared_lines)) = result {
+                return Ok((dropped_cell_counter, nbr_of_cleared_lines))
+            }
+            dropped_cell_counter += 1;
+        }
+    }
 
+    /// Tries to spin the active piece clockwise. Does nothing if the piece cant be rotated.
+    pub fn spin_clock_90(&mut self) {
+        let _ = self.try_spin(SpinDirection::Clockwise);
+    }
+
+    /// Tries tp spin the active piece counterclockwise. Does nothing if the piece cant be rotated. 
+    pub fn spin_counter_90(&mut self) {
+        let _ = self.try_spin(SpinDirection::CounterClockwise);
+    }
+
+    /// Places a new Tetromino on top of the field. Immediately tries to move it down into the field but 
+    /// does nothing else on failure. Then returns its PhysicalTetromino representation. 
+    fn place_tetromino_on_field(field: &mut TetrisField, tetromino: Tetromino) -> PhysicalTetromino {
+        let half_width = TETRIS_FIELD_DEFAULT_WIDTH / 2 - 1;
+
+        let mut phys_tetromino = Tetris::<T>::tetromino_to_physical(tetromino);
+        match phys_tetromino.tetromino {
+            Tetromino::O => {
+                phys_tetromino = phys_tetromino + Pos2::new(half_width as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32);
+            }
+            Tetromino::Line | Tetromino::T | Tetromino::L | Tetromino::J | Tetromino::S | Tetromino::Z => {
+                phys_tetromino = phys_tetromino + Pos2::new((half_width - 1) as i32, TETRIS_FIELD_DEFAULT_HEIGHT as i32);
+            }
+        }
+
+        if Tetris::<T>::try_move(field, &mut phys_tetromino, Direction::Down).is_ok()
+                && tetromino != Tetromino::Line {
+            let _ = Tetris::<T>::try_move(field, &mut phys_tetromino, Direction::Down);
+        }
+
+        phys_tetromino
+    }
+
+    /// Creates a new PhysicalTetromino with the correct color. 
+    fn tetromino_to_physical(tetromino: Tetromino) -> PhysicalTetromino {
+        match tetromino {
+            Tetromino::O => {
+                PhysicalTetromino::new(tetromino, CellStatus::Yellow)
+            }
+            Tetromino::Line => {
+                PhysicalTetromino::new(tetromino, CellStatus::Cyan)
+            }
+            Tetromino::T => {
+                PhysicalTetromino::new(tetromino, CellStatus::Purple)
+            }
+            Tetromino::L => {
+                PhysicalTetromino::new(tetromino, CellStatus::Orange)
+            }
+            Tetromino::J => {
+                PhysicalTetromino::new(tetromino, CellStatus::Blue)
+            }
+            Tetromino::S => {
+                PhysicalTetromino::new(tetromino, CellStatus::Green)
+            }
+            Tetromino::Z => {
+                PhysicalTetromino::new(tetromino, CellStatus::Red)
+            }
+        }
+    }
+
+    /// Replaces the old ghost piece at a potentially incorrect position with the new ghost piece at 
+    /// the correct location. 
+    fn refresh_ghost_piece(&mut self) {
+        self.ghost_piece = Tetris::<T>::find_ghost_piece_pos(&self.field, &self.active_piece);
+    }
+
+    /// Takes the next piece and places it on the playfield. The now vacant next piece is assigned to
+    /// a randomly generated following piece. 
+    fn next_piece(&mut self) {
+        self.active_piece = Tetris::<T>::place_tetromino_on_field(&mut self.field, self.next_piece.tetromino);
+        self.next_piece = Tetris::<T>::tetromino_to_physical((&mut self.iterator).next().unwrap());
+    }
+
+    /// Checks if the active piece would collide with something during the attempted move, thereby 
+    /// preventing this move. 
     fn check_move(field: &TetrisField, tetromino: &PhysicalTetromino, direction: Direction) -> Result<(), ()> {
         let mut field_copy = *field;
         let mut tetromino_copy = *tetromino;
@@ -243,6 +293,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         Ok(())
     }
 
+    /// Checks if the active piece can be moved in the indicated direction. Does so and Returns Ok if 
+    /// possible, does nothing and returns Err otherwise. 
     fn try_move(field: &mut TetrisField, tetromino: &mut PhysicalTetromino, direction: Direction) -> Result<(), ()> {
         //check if move is doable
         Tetris::<T>::check_move(field, tetromino, direction)?;
@@ -283,18 +335,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
 
         Ok(())
     }
-    
-    pub fn drop_completely_down(&mut self) -> Result<(u32, u32), ()> {
-        let mut dropped_cell_counter = 0;
-        loop {
-            let result = self.drop()?;
-            if let (false, Some(nbr_of_cleared_lines)) = result {
-                return Ok((dropped_cell_counter, nbr_of_cleared_lines))
-            }
-            dropped_cell_counter += 1;
-        }
-    }
 
+    /// Checks if any lines are completed and removes any full lines. Returns the number of cleared lines.
     fn check_for_lines_and_clear(&mut self) -> u32 {
         let mut counter = 0;
 
@@ -306,6 +348,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         counter
     }
 
+    /// Iterates through the entire field, looking for any completed lines. Returns the height index
+    /// of the first encountered full line. 
     fn check_line_clearing(&self) -> Option<u32> {
         'outer: for y in 0..TETRIS_FIELD_DEFAULT_HEIGHT {
             for x in 0..TETRIS_FIELD_DEFAULT_WIDTH {
@@ -320,6 +364,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         None
     }
 
+    /// Clears the line at the given height index and drops every cell above that by one. 
     fn clear_line_and_drop_all_above(&mut self, line: u32) {
         let field = &mut self.field.field;
         for line in (line as usize)..(TETRIS_FIELD_DEFAULT_HEIGHT as usize - 1) {
@@ -334,14 +379,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         field[last_line_index..].copy_from_slice(&[CellStatus::Empty; TETRIS_FIELD_DEFAULT_WIDTH as usize]);
     }
 
-    pub fn spin_clock_90(&mut self) {
-        let _ = self.try_spin(SpinDirection::Clockwise);
-    }
-
-    pub fn spin_counter_90(&mut self) {
-        let _ = self.try_spin(SpinDirection::CounterClockwise);
-    }
-
+    /// Tries to spin the active piece in the indicated direction. Returns Err if spinning was not 
+    /// possible. 
     fn try_spin(&mut self, spin_direction: SpinDirection) -> Result<(), ()> {
         if self.check_spin(spin_direction).is_err() {
             let tetromino_original = self.active_piece;
@@ -382,6 +421,8 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         Ok(())
     }
 
+    /// Checks if the active piece could be spun in the indicated direction without colliding with 
+    /// anything else. Returns Ok if spin is possible, Err otherwise. 
     fn check_spin(&self, spin_direction: SpinDirection) -> Result<(), ()> {
         let mut field_copy = self.field;
         let mut tetromino_copy = self.active_piece;
@@ -410,6 +451,7 @@ impl<T: Rng + Sized + Send> Tetris<T> {
         Ok(())
     }
 
+    /// Returns the position where the ghost piece should be. 
     fn find_ghost_piece_pos(field: &TetrisField, tetromino: &PhysicalTetromino) -> PhysicalTetromino {
         let mut field = *field;
         
@@ -448,12 +490,16 @@ impl Default for Tetris<rand::rngs::OsRng> {
     }
 }
 
+/// The Tetris field of the Tetris struct. It is simply a wrapper struct for an array with the 
+/// appropriate get functions. 
 #[derive(Clone, Copy, Debug)]
-pub struct TetrisField {
+struct TetrisField {
     field: [CellStatus; TETRIS_FIELD_LENGTH],
 }
 
 impl TetrisField {
+    /// Returns the copied cellstatus at the given coordinates. Returns None if coordinates are 
+    /// out of bounds. 
     fn get(&self, x: i32, y: i32) -> Option<CellStatus> {
         if !(0..TETRIS_FIELD_DEFAULT_WIDTH as i32).contains(&x) || !(0..TETRIS_FIELD_DEFAULT_HEIGHT as i32).contains(&y) {
             None
@@ -462,6 +508,8 @@ impl TetrisField {
         }
     }
 
+    /// Returns a mutable reference to the cellstatus at the given coordinates. Returns None if the
+    /// coordinates are out of bounds. 
     fn get_mut(&mut self, x: i32, y: i32) -> Option<&mut CellStatus> {
         if !(0..TETRIS_FIELD_DEFAULT_WIDTH as i32).contains(&x) || !(0..TETRIS_FIELD_DEFAULT_HEIGHT as i32).contains(&y) {
             None
@@ -479,6 +527,8 @@ impl From<[CellStatus; TETRIS_FIELD_LENGTH]> for TetrisField {
     }
 }
 
+/// An enum describing the states a cell can have, simply unoccupied or occupied by a color indicating
+/// a particular tetromino. 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CellStatus {
     Empty,
@@ -491,6 +541,7 @@ pub enum CellStatus {
     Orange,
 }
 
+/// An enum listing the 7 different Tetrominos. 
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum Tetromino {
     Line,
@@ -503,6 +554,7 @@ enum Tetromino {
 }
 
 impl Tetromino {
+    /// Returns an array of all 7 Tetrominos. 
     pub fn all_tetromino_array() -> [Self; NBR_OF_TETROMINUS as usize] {
         [
             Self::Line, 
@@ -516,6 +568,11 @@ impl Tetromino {
     }
 }
 
+/// An infinite Iterator which returns a random Tetromino when prompted. The random method used 
+/// is the classic Tetris random: <br/>
+/// Take a list of 7 distinct Tetrominos, shuffle them and then return the list in order. When 
+/// all 7 have been dealt out, get a new list of tetrominos and repeat. This guarantees a repeat of
+/// the same tetromino after at most 12 others.
 #[derive(Clone, Debug)]
 struct TetrominoIterator<T: Rng + Sized> {
     pieces: Vec<Tetromino>,
@@ -523,6 +580,8 @@ struct TetrominoIterator<T: Rng + Sized> {
 }
 
 impl<T: Rng + Sized> TetrominoIterator<T> {
+    /// Creates a new instance with the given random number generator, allowing for a fixed progression
+    /// of pieces. 
     pub fn new(mut rng: T) -> Self {
         let pieces = Vec::from(Self::get_new_seven(&mut rng));
 
@@ -532,6 +591,7 @@ impl<T: Rng + Sized> TetrominoIterator<T> {
         }
     }
 
+    /// Returns a shuffled list of 7 tetrominos. 
     fn get_new_seven(rng: &mut T) -> [Tetromino; NBR_OF_TETROMINUS as usize] {
         let mut pieces = Tetromino::all_tetromino_array();
         pieces.shuffle(rng);
@@ -553,6 +613,7 @@ impl<T: Rng + Sized> Iterator for &mut TetrominoIterator<T> {
     }
 }
 
+/// A struct containing a 2d integer position. 
 #[derive(Clone, Copy, Debug)]
 struct Pos2 {
     pub x: i32, 
@@ -603,6 +664,7 @@ impl From<Pos2f> for Pos2 {
     }
 }
 
+/// A struct containing a 2d floating point position. 
 #[derive(Clone, Copy, Debug)]
 struct Pos2f {
     x: f32,
@@ -617,6 +679,7 @@ impl Pos2f {
         }
     }
 
+    /// Rotates the point 90° clockwise with respect to (0, 0).
     fn rotate_clock_90(&mut self) {
         let x = self.x;
         let y = self.y;
@@ -625,6 +688,7 @@ impl Pos2f {
         self.y = -x;
     }
 
+    /// Rotates the point 90° counterclickwise with respect to (0, 0).
     fn rotate_counter_90(&mut self) {
         let x = self.x;
         let y = self.y;
@@ -665,6 +729,8 @@ impl std::ops::Sub<Pos2f> for Pos2f {
     }
 }
 
+/// A tetromino which contains information about the color and position of individual cells as well as the 
+/// point around which the individual cells will be rotated. 
 #[derive(Clone, Copy, Debug)]
 struct PhysicalTetromino {
     coords: [Pos2; 4],
@@ -765,6 +831,7 @@ impl PhysicalTetromino {
         }
     }
 
+    /// Spins the piece in the given direction. 
     fn spin(&mut self, spin_direction: SpinDirection) {
         for pos in &mut self.coords {
             let mut float_pos = Pos2f::from(*pos);
@@ -818,6 +885,7 @@ impl std::ops::Sub<Pos2> for PhysicalTetromino {
     }
 }
 
+/// The four cardinal directions
 #[derive(Clone, Copy, Debug)]
 enum Direction {
     Left, 
@@ -826,6 +894,7 @@ enum Direction {
     Up,
 }
 
+/// A spin direction on a 2d plane. 
 #[derive(Clone, Copy, Debug)]
 enum SpinDirection {
     Clockwise, 

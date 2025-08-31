@@ -9,4 +9,5 @@ Upon starting the executable, it automatically starts the game with the followin
 - Rotate Counterclockwise: Q
 - Rotate Clockwise: E
 - Store the active piece: W
+
 These settings are however not set in stone and can be reassigned in the pause menu via Escape. 
